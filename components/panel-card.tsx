@@ -19,6 +19,8 @@ import type {
   ChatEventPayload,
   MessageView,
   PanelView,
+  PanelSessionStatusResponse,
+  SessionStatusView,
 } from "@/lib/types";
 
 import type { GroupRoleView } from "@/lib/types";
@@ -119,6 +121,10 @@ export function PanelCard({
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogConfig | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [groupRoles, setGroupRoles] = useState<GroupRoleView[]>(panel.groupRoles ?? []);
+  const [directSessionStatus, setDirectSessionStatus] = useState<SessionStatusView | null>(null);
+  const [groupRoleSessionStatuses, setGroupRoleSessionStatuses] = useState<
+    Record<string, SessionStatusView | null>
+  >({});
   const [createGroupRoleDialog, setCreateGroupRoleDialog] = useState<CreateGroupRoleDialogConfig | null>(null);
   const [manageGroupRolesDialog, setManageGroupRolesDialog] = useState<ManageGroupRolesDialogConfig | null>(null);
   const [isCreatingRole, setIsCreatingRole] = useState(false);
@@ -154,6 +160,37 @@ export function PanelCard({
   useEffect(() => {
     setGroupRoles(panel.groupRoles ?? []);
   }, [panel.groupRoles]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSessionStatus() {
+      const response = await fetch(`/api/panels/${panel.id}/session-status`, {
+        cache: "no-store",
+      }).catch(() => null);
+      if (!response?.ok || cancelled) {
+        return;
+      }
+
+      const payload = (await response.json().catch(() => null)) as PanelSessionStatusResponse | null;
+      if (!payload || cancelled) {
+        return;
+      }
+
+      setDirectSessionStatus(payload.direct ?? null);
+      setGroupRoleSessionStatuses(payload.groupRoles ?? {});
+    }
+
+    void loadSessionStatus();
+    const timer = window.setInterval(() => {
+      void loadSessionStatus();
+    }, activeRunId ? 10_000 : 30_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeRunId, panel.id]);
 
   useEffect(() => {
     activeRunIdRef.current = activeRunId;
@@ -603,6 +640,8 @@ export function PanelCard({
         }}
         isGroupPanel={isGroupPanel}
         groupRoles={groupRoles}
+        directSessionStatus={directSessionStatus}
+        groupRoleSessionStatuses={groupRoleSessionStatuses}
       />
 
       <PanelComposer

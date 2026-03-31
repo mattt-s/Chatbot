@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { AttachmentView, MessageView } from "@/lib/types";
+import type { SessionStatusView } from "@/lib/types";
 import { formatBytes } from "@/lib/utils";
 import { formatTimeLabel } from "./chat-helpers";
 import type { RuntimeStep } from "./runtime-helpers";
@@ -191,6 +192,46 @@ function MarkdownMessage({ text }: { text: string }) {
   );
 }
 
+function compactTokenCount(value: number) {
+  if (value < 1000) {
+    return String(value);
+  }
+
+  const kilo = value / 1000;
+  if (kilo >= 100 || Number.isInteger(kilo)) {
+    return `${Math.round(kilo)}k`;
+  }
+
+  return `${kilo.toFixed(1).replace(/\.0$/, "")}k`;
+}
+
+function formatSessionMeta(status: SessionStatusView | null | undefined) {
+  if (!status) {
+    return [];
+  }
+
+  const parts: string[] = [];
+  if (status.model) {
+    parts.push(status.model);
+  }
+
+  if (status.contextUsedTokens != null && status.contextMaxTokens != null) {
+    const percent =
+      status.contextPercent != null
+        ? ` (${status.contextPercent}%)`
+        : "";
+    parts.push(
+      `${compactTokenCount(status.contextUsedTokens)}/${compactTokenCount(status.contextMaxTokens)}${percent}`,
+    );
+  }
+
+  if (status.compactions != null) {
+    parts.push(`Compactions: ${status.compactions}`);
+  }
+
+  return parts;
+}
+
 /**
  * 单条聊天消息气泡。
  *
@@ -224,6 +265,7 @@ function MessageBubbleComponent({
   groupRoleAvatarUrl,
   groupRoleIndex,
   mentionedRoles,
+  sessionStatus,
 }: {
   message: MessageView;
   hideNoiseText?: boolean;
@@ -248,6 +290,7 @@ function MessageBubbleComponent({
   groupRoleIndex?: number;
   /** 群组消息：被 @mention 的角色列表 */
   mentionedRoles?: Array<{ label: string; emoji: string | null }>;
+  sessionStatus?: SessionStatusView | null;
 }) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -281,6 +324,7 @@ function MessageBubbleComponent({
           ? `${message.senderLabel}${effectiveGroupEmoji ? ` ${effectiveGroupEmoji}` : ""}`
           : effectiveGroupLabel)
       : "System";
+  const sessionMetaParts = formatSessionMeta(sessionStatus);
 
   const groupAvatarContent = groupRoleAvatarUrl ? (
     <Image
@@ -327,18 +371,6 @@ function MessageBubbleComponent({
         </div>
       ) : null}
       <div className="min-w-0 max-w-[92%] sm:max-w-[86%]">
-        {isGroupStart && (
-          <div
-            className={`mb-1 px-1 text-[11px] text-[var(--ink-soft)] ${
-              isUser ? "text-right" : "text-left"
-            }`}
-          >
-            <span>{roleLabel}</span>
-            <span className="mx-1">·</span>
-            <time suppressHydrationWarning>{formatTimeLabel(message.createdAt)}</time>
-          </div>
-        )}
-
         <div
           className={`relative min-w-0 rounded-2xl px-4 py-3 text-[var(--ink)] shadow-sm ${
             isUser
@@ -477,6 +509,24 @@ function MessageBubbleComponent({
           ) : null}
 
         </div>
+
+        {isGroupStart ? (
+          <div
+            className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-[var(--ink-soft)] ${
+              isUser ? "justify-end text-right" : "justify-start text-left"
+            }`}
+          >
+            <span>{roleLabel}</span>
+            <span aria-hidden>·</span>
+            <time suppressHydrationWarning>{formatTimeLabel(message.createdAt)}</time>
+            {sessionMetaParts.map((part) => (
+              <span key={part} className="contents">
+                <span aria-hidden>·</span>
+                <span>{part}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

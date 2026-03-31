@@ -235,6 +235,22 @@ export interface GroupRoleView {
   runtimeNote?: string | null;
 }
 
+export interface SessionStatusView {
+  sessionKey: string | null;
+  model: string | null;
+  contextUsedTokens: number | null;
+  contextMaxTokens: number | null;
+  contextPercent: number | null;
+  compactions: number | null;
+  source: "runtime" | "gateway-fallback" | "unknown";
+}
+
+export interface PanelSessionStatusResponse {
+  panelId: string;
+  direct: SessionStatusView | null;
+  groupRoles?: Record<string, SessionStatusView | null>;
+}
+
 /** 前端视图：聊天面板 */
 export interface PanelView {
   id: string;

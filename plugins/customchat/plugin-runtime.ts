@@ -305,19 +305,6 @@ export async function inspectCustomChatSession(
     sessionKey,
   });
   const runtimeInspection = buildCustomChatRuntimeInspection(trackedRun);
-  if (trackedRun) {
-    return {
-      target,
-      sessionKey,
-      exists: true,
-      terminal: hasRuntimeTerminalState(trackedRun),
-      waitStatus: null,
-      snapshot: null,
-      runtime: runtimeInspection,
-      source: "runtime",
-    };
-  }
-
   const snapshots = await listGatewaySessions().catch(() => []);
   const snapshot = sessionKey
     ? snapshots.find((candidate) => candidate.key === sessionKey) ?? null
@@ -327,18 +314,19 @@ export async function inspectCustomChatSession(
     : null;
   const waitStatus = parseGatewayWaitStatus(waitPayload);
   const terminal =
+    (trackedRun ? hasRuntimeTerminalState(trackedRun) : false) ||
     sessionShowsAbortedLastRun(snapshot) ||
     (waitStatus ? isTerminalGatewayWaitStatus(waitStatus) : false);
 
   return {
     target,
     sessionKey,
-    exists: Boolean(snapshot),
+    exists: Boolean(snapshot) || Boolean(trackedRun),
     terminal,
     waitStatus,
     snapshot,
     runtime: runtimeInspection,
-    source: "gateway-fallback",
+    source: trackedRun ? "runtime" : "gateway-fallback",
   };
 }
 

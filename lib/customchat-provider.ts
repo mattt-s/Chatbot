@@ -133,6 +133,7 @@ export async function inspectProviderSession(input: {
     waitStatus?: string | null;
     sessionKey?: string | null;
     snapshot?: unknown;
+    source?: "runtime" | "gateway-fallback";
   }>(response);
 
   if (!response.ok) {
