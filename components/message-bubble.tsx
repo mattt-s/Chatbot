@@ -9,10 +9,12 @@
 
 import { memo, useState } from "react";
 import Image from "next/image";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import type { AttachmentView, MessageView } from "@/lib/types";
 import { formatBytes } from "@/lib/utils";
-import { formatTimeLabel, renderLinkedText } from "./chat-helpers";
+import { formatTimeLabel } from "./chat-helpers";
 import type { RuntimeStep } from "./runtime-helpers";
 import {
   isAssistantTextStep,
@@ -118,6 +120,74 @@ function AttachmentActionMenu({ attachment }: { attachment: AttachmentView }) {
         </a>
       </div>
     </details>
+  );
+}
+
+function MarkdownMessage({ text }: { text: string }) {
+  return (
+    <div className="min-w-0 max-w-full text-sm leading-6 text-[var(--ink)] [overflow-wrap:anywhere]">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => (
+            <h1 className="mb-3 text-2xl font-semibold leading-8 text-[var(--ink)]">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mb-3 text-xl font-semibold leading-7 text-[var(--ink)]">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mb-2 text-lg font-semibold leading-7 text-[var(--ink)]">{children}</h3>
+          ),
+          p: ({ children }) => <p className="mb-3 whitespace-pre-wrap last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
+          ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+          li: ({ children }) => <li className="whitespace-pre-wrap">{children}</li>,
+          blockquote: ({ children }) => (
+            <blockquote className="mb-3 border-l-4 border-black/10 pl-3 text-[var(--ink-soft)] last:mb-0">
+              {children}
+            </blockquote>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sky-700 underline decoration-sky-500 underline-offset-2 hover:text-sky-800"
+            >
+              {children}
+            </a>
+          ),
+          pre: ({ children }) => (
+            <pre className="mb-3 max-w-full overflow-x-auto rounded-lg bg-black/5 px-3 py-2 font-mono text-[11px] leading-5 text-[var(--ink)] last:mb-0">
+              {children}
+            </pre>
+          ),
+          code: ({ className, children }) => {
+            const isBlock = Boolean(className);
+            if (isBlock) {
+              return <code className={className}>{children}</code>;
+            }
+            return (
+              <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[12px] text-[var(--ink)]">
+                {children}
+              </code>
+            );
+          },
+          hr: () => <hr className="my-4 border-black/10" />,
+          table: ({ children }) => (
+            <div className="mb-3 overflow-x-auto last:mb-0">
+              <table className="min-w-full border-collapse text-left text-xs">{children}</table>
+            </div>
+          ),
+          th: ({ children }) => (
+            <th className="border border-black/10 bg-black/5 px-2 py-1 font-semibold">{children}</th>
+          ),
+          td: ({ children }) => <td className="border border-black/10 px-2 py-1 align-top">{children}</td>,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
   );
 }
 
@@ -291,12 +361,12 @@ function MessageBubbleComponent({
             <div className="mb-3 min-w-0 space-y-2">
               {sortedRuntimeSteps.map((step) =>
                 isAssistantTextStep(step) ? (
-                  <pre
+                  <div
                     key={step.id}
-                    className="min-w-0 max-w-full whitespace-pre-wrap break-words font-sans text-sm leading-6 [overflow-wrap:anywhere]"
+                    className="min-w-0 max-w-full break-words font-sans [overflow-wrap:anywhere]"
                   >
-                    {renderLinkedText(step.detail ?? step.description)}
-                  </pre>
+                    <MarkdownMessage text={step.detail ?? step.description} />
+                  </div>
                 ) : (
                   <details
                     key={step.id}
@@ -345,9 +415,9 @@ function MessageBubbleComponent({
           {shouldDeferAssistantText ? (
             <p className="text-sm text-[var(--ink-soft)]">执行中，等待最终结果...</p>
           ) : shouldHideEmptyPlaceholder ? null : visibleMessageText && !hasAssistantTextStep ? (
-            <pre className="min-w-0 max-w-full whitespace-pre-wrap break-words font-sans text-sm leading-6 [overflow-wrap:anywhere]">
-              {renderLinkedText(visibleMessageText)}
-            </pre>
+            <div className="min-w-0 max-w-full break-words font-sans [overflow-wrap:anywhere]">
+              <MarkdownMessage text={visibleMessageText} />
+            </div>
           ) : message.state === "error" ? (
             <p className="text-sm text-red-700">{message.errorMessage}</p>
           ) : (
