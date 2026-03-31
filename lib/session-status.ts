@@ -51,25 +51,38 @@ export function extractMessageSessionMeta(input: {
     return null;
   }
 
+  const snapshotRaw = asRecord(snapshot.raw);
+
   const model =
     normalizeModelName(snapshot.model) ??
+    normalizeModelName(snapshotRaw?.model) ??
     normalizeModelName(snapshot.modelName) ??
+    normalizeModelName(snapshotRaw?.modelName) ??
     normalizeModelName(snapshot.providerModel) ??
+    normalizeModelName(snapshotRaw?.providerModel) ??
     normalizeModelName(snapshot.resolvedModel);
 
   const contextUsedTokens =
     readFiniteNumber(snapshot.totalTokens) ??
+    readFiniteNumber(snapshotRaw?.totalTokens) ??
     readFiniteNumber(snapshot.totalTokenCount) ??
+    readFiniteNumber(snapshotRaw?.totalTokenCount) ??
     null;
   const contextMaxTokens =
     readFiniteNumber(snapshot.contextTokens) ??
+    readFiniteNumber(snapshotRaw?.contextTokens) ??
     readFiniteNumber(snapshot.contextWindow) ??
+    readFiniteNumber(snapshotRaw?.contextWindow) ??
     readFiniteNumber(snapshot.contextLimit) ??
+    readFiniteNumber(snapshotRaw?.contextLimit) ??
     null;
   const compactions =
     readFiniteNumber(snapshot.compactionCount) ??
+    readFiniteNumber(snapshotRaw?.compactionCount) ??
     readFiniteNumber(snapshot.compactions) ??
+    readFiniteNumber(snapshotRaw?.compactions) ??
     readFiniteNumber(snapshot.authProfileOverrideCompactionCount) ??
+    readFiniteNumber(snapshotRaw?.authProfileOverrideCompactionCount) ??
     null;
 
   const contextPercent =
