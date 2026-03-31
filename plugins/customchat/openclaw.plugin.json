@@ -1,0 +1,54 @@
+{
+  "id": "customchat",
+  "name": "Custom Chat",
+  "version": "0.1.0",
+  "channels": [
+    "customchat"
+  ],
+  "description": "Custom Chat messaging channel backed by the ChatBot app.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "minLength": 1
+      },
+      "sharedSecret": {
+        "type": "string",
+        "minLength": 1
+      },
+      "accounts": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "baseUrl": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sharedSecret": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "baseUrl",
+            "sharedSecret"
+          ]
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "baseUrl": {
+      "label": "Base URL",
+      "placeholder": "https://bot.user.work"
+    },
+    "sharedSecret": {
+      "label": "Shared Secret",
+      "sensitive": true
+    }
+  }
+}

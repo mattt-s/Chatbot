@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #f4efe6;
+  --paper: #fffaf3;
+  --paper-2: #f1e9dc;
+  --ink: #0f1724;
+  --ink-soft: #5c6676;
+  --accent: #e86918;
+}
+
+@theme inline {
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Noto Sans CJK SC", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, "Liberation Mono",
+    monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(232, 105, 24, 0.11), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(38, 150, 137, 0.12), transparent 34%),
+    var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 32%, white);
+  color: var(--ink);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(15, 23, 36, 0.16);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

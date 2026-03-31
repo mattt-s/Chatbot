@@ -1,0 +1,27 @@
+{
+  "name": "customchat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "openclaw": ">=2026.3.22"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"],
+    "channel": {
+      "id": "customchat",
+      "label": "Custom Chat",
+      "selectionLabel": "Custom Chat",
+      "docsPath": "/channels/customchat",
+      "docsLabel": "customchat"
+    },
+    "install": {
+      "minHostVersion": ">=2026.3.22"
+    }
+  }
+}

@@ -1,0 +1,3899 @@
+{
+  "version": "2.9",
+  "children": [
+    {
+      "type": "frame",
+      "id": "login-page",
+      "x": 0,
+      "y": 0,
+      "name": "Login Page",
+      "width": 1440,
+      "height": 900,
+      "fill": [
+        {
+          "type": "gradient",
+          "gradientType": "radial",
+          "enabled": true,
+          "rotation": 0,
+          "size": {
+            "width": 1,
+            "height": 1
+          },
+          "colors": [
+            {
+              "color": "#E8691830",
+              "position": 0
+            },
+            {
+              "color": "#00000000",
+              "position": 1
+            }
+          ],
+          "center": {
+            "x": 0.08,
+            "y": 0.08
+          }
+        },
+        {
+          "type": "gradient",
+          "gradientType": "radial",
+          "enabled": true,
+          "rotation": 0,
+          "size": {
+            "width": 1,
+            "height": 1
+          },
+          "colors": [
+            {
+              "color": "#26968933",
+              "position": 0
+            },
+            {
+              "color": "#00000000",
+              "position": 1
+            }
+          ],
+          "center": {
+            "x": 0.92,
+            "y": 0.9
+          }
+        },
+        "#F4EFE6"
+      ],
+      "layout": "vertical",
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "login-card",
+          "name": "Login Card",
+          "width": 1120,
+          "height": 640,
+          "fill": "#FFFAF3",
+          "cornerRadius": 36,
+          "stroke": {
+            "thickness": 1,
+            "fill": "#00000014"
+          },
+          "effect": {
+            "type": "shadow",
+            "shadowType": "outer",
+            "color": "#0C121414",
+            "offset": {
+              "x": 0,
+              "y": 24
+            },
+            "blur": 100
+          },
+          "children": [
+            {
+              "type": "frame",
+              "id": "login-left",
+              "name": "Hero Panel",
+              "width": 620,
+              "height": "fill_container",
+              "fill": [
+                {
+                  "type": "gradient",
+                  "gradientType": "radial",
+                  "enabled": true,
+                  "rotation": 0,
+                  "size": {
+                    "width": 1,
+                    "height": 1
+                  },
+                  "colors": [
+                    {
+                      "color": "#FF8B2D73",
+                      "position": 0
+                    },
+                    {
+                      "color": "#00000000",
+                      "position": 0.6
+                    }
+                  ],
+                  "center": {
+                    "x": 0.1,
+                    "y": 0.1
+                  }
+                },
+                {
+                  "type": "gradient",
+                  "gradientType": "radial",
+                  "enabled": true,
+                  "rotation": 0,
+                  "size": {
+                    "width": 1,
+                    "height": 1
+                  },
+                  "colors": [
+                    {
+                      "color": "#40D8C447",
+                      "position": 0
+                    },
+                    {
+                      "color": "#00000000",
+                      "position": 0.65
+                    }
+                  ],
+                  "center": {
+                    "x": 0.9,
+                    "y": 0.9
+                  }
+                },
+                "#0F1724"
+              ],
+              "layout": "vertical",
+              "gap": 14,
+              "padding": [
+                48,
+                40
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "login-left-label",
+                  "fill": "#FFFFFFB3",
+                  "content": "Provider-style Web Channel",
+                  "fontFamily": "PingFang SC",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 2.4
+                },
+                {
+                  "type": "text",
+                  "id": "login-left-title",
+                  "fill": "#FFFFFF",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "把门户变成一个被动接收消息的独立 channel。",
+                  "lineHeight": 1.2,
+                  "fontFamily": "PingFang SC",
+                  "fontSize": 40,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "login-left-desc",
+                  "fill": "#FFFFFFBF",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "这里保留本地账号体系、文件上传入口、多面板角色窗口和 SSE 更新流，但不再由 app 主动连接 OpenClaw Gateway。",
+                  "lineHeight": 1.6,
+                  "fontFamily": "PingFang SC",
+                  "fontSize": 16,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "login-left-chips",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "login-chip-1",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF0F",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FFFFFF26"
+                      },
+                      "padding": [
+                        12,
+                        16
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "login-chip-1-text",
+                          "fill": "#FFFFFFCC",
+                          "content": "认证：Cookie Session + 本地用户存储",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "login-chip-2",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF0F",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FFFFFF26"
+                      },
+                      "padding": [
+                        12,
+                        16
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "login-chip-2-text",
+                          "fill": "#FFFFFFCC",
+                          "content": "架构：Slack-style 外部 provider channel",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "login-chip-3",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF0F",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FFFFFF26"
+                      },
+                      "padding": [
+                        12,
+                        16
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "login-chip-3-text",
+                          "fill": "#FFFFFFCC",
+                          "content": "UI：每个窗口绑定一个独立 panel target",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "login-right",
+              "name": "Form Panel",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "padding": [
+                48,
+                40
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "login-right-label",
+                  "fill": "#5C6676",
+                  "content": "Sign In",
+                  "fontFamily": "PingFang SC",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 2.2
+                },
+                {
+                  "type": "text",
+                  "id": "login-right-title",
+                  "fill": "#0F1724",
+                  "content": "进入控制台",
+                  "fontFamily": "PingFang SC",
+                  "fontSize": 30,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "login-right-desc",
+                  "fill": "#5C6676",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "管理员邮箱来自环境变量；角色目录也来自本地配置。",
+                  "lineHeight": 1.6,
+                  "fontFamily": "PingFang SC",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "login-form",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "login-email-field",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "login-email-label",
+                          "fill": "#5C6676",
+                          "content": "Email",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "login-email-input",
+                          "width": "fill_container",
+                          "height": 48,
+                          "fill": "#FFFFFFCC",
+                          "cornerRadius": 20,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#0000001A"
+                          },
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "login-email-text",
+                              "fill": "#0F1724",
+                              "content": "admin@example.com",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "login-pass-field",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "login-pass-label",
+                          "fill": "#5C6676",
+                          "content": "Password",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "login-pass-input",
+                          "width": "fill_container",
+                          "height": 48,
+                          "fill": "#FFFFFFCC",
+                          "cornerRadius": 20,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#0000001A"
+                          },
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "login-pass-text",
+                              "fill": "#5C6676",
+                              "content": "••••••••",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "login-submit",
+                      "width": "fill_container",
+                      "height": 48,
+                      "fill": "#0F1724",
+                      "cornerRadius": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "login-submit-text",
+                          "fill": "#FFFAF3",
+                          "content": "进入 Web Channel",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "chat-page",
+      "x": 1600,
+      "y": 0,
+      "name": "Chat Page",
+      "width": 1440,
+      "height": 900,
+      "fill": [
+        {
+          "type": "gradient",
+          "gradientType": "radial",
+          "enabled": true,
+          "rotation": 0,
+          "size": {
+            "width": 1,
+            "height": 1
+          },
+          "colors": [
+            {
+              "color": "#E8691830",
+              "position": 0
+            },
+            {
+              "color": "#00000000",
+              "position": 1
+            }
+          ],
+          "center": {
+            "x": 0.08,
+            "y": 0.08
+          }
+        },
+        {
+          "type": "gradient",
+          "gradientType": "radial",
+          "enabled": true,
+          "rotation": 0,
+          "size": {
+            "width": 1,
+            "height": 1
+          },
+          "colors": [
+            {
+              "color": "#26968933",
+              "position": 0
+            },
+            {
+              "color": "#00000000",
+              "position": 1
+            }
+          ],
+          "center": {
+            "x": 0.92,
+            "y": 0.9
+          }
+        },
+        "#F4EFE6"
+      ],
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 16,
+      "children": [
+        {
+          "type": "frame",
+          "id": "chat-shell",
+          "width": "fill_container",
+          "height": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "chat-sidebar",
+              "width": 320,
+              "height": "fill_container",
+              "fill": "#FFFAF3",
+              "cornerRadius": 30,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#00000014"
+              },
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#0C12141F",
+                "offset": {
+                  "x": 0,
+                  "y": 24
+                },
+                "blur": 80
+              },
+              "layout": "vertical",
+              "gap": 12,
+              "padding": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "sidebar-header",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "sidebar-header-text",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sidebar-header-label",
+                          "fill": "#5C6676",
+                          "content": "roles",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 2.2
+                        },
+                        {
+                          "type": "text",
+                          "id": "sidebar-header-title",
+                          "fill": "#0F1724",
+                          "content": "角色列表",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 20,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sidebar-close",
+                      "width": 40,
+                      "height": 40,
+                      "cornerRadius": 16,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sidebar-close-text",
+                          "fill": "#5C6676",
+                          "content": "×",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "sidebar-create-actions",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "sidebar-new-role",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#0F1724",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sidebar-new-role-text",
+                          "fill": "#FFFAF3",
+                          "content": "新增角色",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sidebar-new-group",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#0F1724",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sidebar-new-group-text",
+                          "fill": "#FFFAF3",
+                          "content": "新增群组",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "sidebar-list",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "sidebar-item-active",
+                      "width": "fill_container",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 18,
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sidebar-item-active-title",
+                          "fill": "#0F1724",
+                          "content": "Role 1",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "sidebar-item-active-desc",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "最近一次回复摘要会出现在这里。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sidebar-item",
+                      "width": "fill_container",
+                      "fill": "#FFFAF3",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sidebar-item-title",
+                          "fill": "#0F1724",
+                          "content": "Role 2",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "sidebar-item-desc",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "等待新的消息进入。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sidebar-item-group",
+                      "width": "fill_container",
+                      "fill": "#FFFAF3",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sidebar-item-group-title",
+                          "fill": "#0F1724",
+                          "content": "群组 A",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "sidebar-item-group-desc",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "群组最新消息会显示在这里。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "sidebar-user",
+                  "width": "fill_container",
+                  "fill": "#F1E9DC",
+                  "cornerRadius": 24,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "sidebar-user-top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "sidebar-user-text",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "sidebar-user-name",
+                              "fill": "#0F1724",
+                              "content": "管理员",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "sidebar-user-status",
+                              "gap": 6,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "sidebar-user-dot",
+                                  "width": 10,
+                                  "height": 10,
+                                  "fill": "#10B981",
+                                  "cornerRadius": 999
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "sidebar-user-channel",
+                                  "fill": "#5C6676",
+                                  "content": "Connected",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "sidebar-user-badge",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "padding": [
+                            6,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "sidebar-user-badge-text",
+                              "fill": "#5C6676",
+                              "content": "2 roles",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sidebar-user-actions",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "sidebar-action-new",
+                          "width": "fill_container",
+                          "height": 36,
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#0000001A"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "sidebar-action-new-text",
+                              "fill": "#0F1724",
+                              "content": "新增",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "sidebar-action-logout",
+                          "width": "fill_container",
+                          "height": 36,
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#0000001A"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "sidebar-action-logout-text",
+                              "fill": "#0F1724",
+                              "content": "退出",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "chat-main",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "#FFFAF3",
+              "cornerRadius": 32,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#00000014"
+              },
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#0C121414",
+                "offset": {
+                  "x": 0,
+                  "y": 24
+                },
+                "blur": 80
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "chat-header",
+                  "width": "fill_container",
+                  "fill": "#FFFAF3",
+                  "gap": 8,
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "chat-header-role",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "chat-header-role-text",
+                          "fill": "#0F1724",
+                          "content": "列表",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "chat-header-title",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "gap": 6,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "chat-header-title-text",
+                          "fill": "#0F1724",
+                          "content": "Role 1",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "chat-header-status",
+                      "fill": "#D1FAE5",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "chat-header-status-text",
+                          "fill": "#047857",
+                          "content": "connected",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "chat-header-count",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "chat-header-count-text",
+                          "fill": "#5C6676",
+                          "content": "12 msgs",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.2
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "chat-messages",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "#E5EBE3",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "msg-assistant",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "msg-assistant-avatar",
+                          "width": 36,
+                          "height": 36,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "msg-assistant-avatar-text",
+                              "fill": "#5C6676",
+                              "content": "A",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "msg-assistant-bubble",
+                          "width": 520,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 20,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "layout": "vertical",
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "msg-assistant-text",
+                              "fill": "#0F1724",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "你好，我已经准备好接收来自 provider 的消息流。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "msg-user",
+                      "width": "fill_container",
+                      "justifyContent": "end",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "msg-user-bubble",
+                          "width": 460,
+                          "fill": "#95EC69",
+                          "cornerRadius": 20,
+                          "layout": "vertical",
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "msg-user-text",
+                              "fill": "#0F1724",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "很好，我们开始同步对话。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "chat-composer",
+                  "width": "fill_container",
+                  "fill": "#FFFAF3",
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#00000014"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "composer-box",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 10,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "composer-placeholder",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "和 Role 1 对话。支持图片、音频、视频、文档一起上传。",
+                          "lineHeight": 1.6,
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "composer-actions",
+                          "width": "fill_container",
+                          "layout": "horizontal",
+                          "justifyContent": "space_between",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "composer-left-actions",
+                              "layout": "horizontal",
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "composer-upload",
+                                  "cornerRadius": 999,
+                                  "stroke": {
+                                    "thickness": 1,
+                                    "fill": "#0000001A"
+                                  },
+                                  "padding": [
+                                    8,
+                                    14
+                                  ],
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "composer-upload-text",
+                                      "fill": "#0F1724",
+                                      "content": "上传",
+                                      "fontFamily": "PingFang SC",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "composer-file",
+                                  "fill": "#F1E9DC",
+                                  "cornerRadius": 999,
+                                  "padding": [
+                                    6,
+                                    12
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "composer-file-text",
+                                      "fill": "#5C6676",
+                                      "content": "已选 2 个文件",
+                                      "fontFamily": "PingFang SC",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "composer-send",
+                              "fill": "#0F1724",
+                              "cornerRadius": 999,
+                              "padding": [
+                                8,
+                                16
+                              ],
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "composer-send-text",
+                                  "fill": "#FFFAF3",
+                                  "content": "发送",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "composer-error",
+                      "width": "fill_container",
+                      "fill": "#FEF2F2",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FECACA"
+                      },
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "composer-error-text",
+                          "fill": "#B91C1C",
+                          "content": "文件过大，单次单文件上传不能超过 10MB。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "chat-page-modal",
+      "x": 3200,
+      "y": 0,
+      "name": "Chat Page (Group Modal Open)",
+      "width": 1440,
+      "height": 900,
+      "fill": [
+        {
+          "type": "gradient",
+          "gradientType": "radial",
+          "enabled": true,
+          "rotation": 0,
+          "size": {
+            "width": 1,
+            "height": 1
+          },
+          "colors": [
+            {
+              "color": "#E8691830",
+              "position": 0
+            },
+            {
+              "color": "#00000000",
+              "position": 1
+            }
+          ],
+          "center": {
+            "x": 0.08,
+            "y": 0.08
+          }
+        },
+        {
+          "type": "gradient",
+          "gradientType": "radial",
+          "enabled": true,
+          "rotation": 0,
+          "size": {
+            "width": 1,
+            "height": 1
+          },
+          "colors": [
+            {
+              "color": "#26968933",
+              "position": 0
+            },
+            {
+              "color": "#00000000",
+              "position": 1
+            }
+          ],
+          "center": {
+            "x": 0.92,
+            "y": 0.9
+          }
+        },
+        "#F4EFE6"
+      ],
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 16,
+      "children": [
+        {
+          "type": "frame",
+          "id": "KdOac",
+          "width": "fill_container",
+          "height": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "xBZzc",
+              "width": 320,
+              "height": "fill_container",
+              "fill": "#FFFAF3",
+              "cornerRadius": 30,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#00000014"
+              },
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#0C12141F",
+                "offset": {
+                  "x": 0,
+                  "y": 24
+                },
+                "blur": 80
+              },
+              "layout": "vertical",
+              "gap": 12,
+              "padding": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "nLSoF",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "3Tdmp",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "dlJbx",
+                          "fill": "#5C6676",
+                          "content": "roles",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 2.2
+                        },
+                        {
+                          "type": "text",
+                          "id": "oYD2j",
+                          "fill": "#0F1724",
+                          "content": "角色列表",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 20,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "qrF8j",
+                      "width": 40,
+                      "height": 40,
+                      "cornerRadius": 16,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zCBUA",
+                          "fill": "#5C6676",
+                          "content": "×",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "qDMWQ",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "t7i2e",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#0F1724",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "eX1Ff",
+                          "fill": "#FFFAF3",
+                          "content": "新增角色",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AzpKm",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#0F1724",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "MT6ww",
+                          "fill": "#FFFAF3",
+                          "content": "新增群组",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "s2mrQ",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "C2Hs6",
+                      "width": "fill_container",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 18,
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "oAhlv",
+                          "fill": "#0F1724",
+                          "content": "Role 1",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "7nH64",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "最近一次回复摘要会出现在这里。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "qdpiF",
+                      "width": "fill_container",
+                      "fill": "#FFFAF3",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "JsUgB",
+                          "fill": "#0F1724",
+                          "content": "Role 2",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "WGsiH",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "等待新的消息进入。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "TlPos",
+                      "width": "fill_container",
+                      "fill": "#FFFAF3",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ozfx0",
+                          "fill": "#0F1724",
+                          "content": "群组 A",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QjvZK",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "群组最新消息会显示在这里。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "gs0ab",
+                  "width": "fill_container",
+                  "fill": "#F1E9DC",
+                  "cornerRadius": 24,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "nH2tu",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "bvIGL",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "HCQR9",
+                              "fill": "#0F1724",
+                              "content": "管理员",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "nxTWK",
+                              "gap": 6,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "BF4iX",
+                                  "width": 10,
+                                  "height": 10,
+                                  "fill": "#10B981",
+                                  "cornerRadius": 999
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "ayMvb",
+                                  "fill": "#5C6676",
+                                  "content": "Connected",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "K1iwf",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "padding": [
+                            6,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "CZX6W",
+                              "fill": "#5C6676",
+                              "content": "2 roles",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "rZJee",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Pd7Qk",
+                          "width": "fill_container",
+                          "height": 36,
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#0000001A"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "AX6Bs",
+                              "fill": "#0F1724",
+                              "content": "新增",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "grfuF",
+                          "width": "fill_container",
+                          "height": 36,
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#0000001A"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ZIU2m",
+                              "fill": "#0F1724",
+                              "content": "退出",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "75zJ6",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "#FFFAF3",
+              "cornerRadius": 32,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#00000014"
+              },
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#0C121414",
+                "offset": {
+                  "x": 0,
+                  "y": 24
+                },
+                "blur": 80
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "9J1sq",
+                  "width": "fill_container",
+                  "fill": "#FFFAF3",
+                  "gap": 8,
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "bCMSp",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "kRXee",
+                          "fill": "#0F1724",
+                          "content": "列表",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "t93Eg",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "gap": 6,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "2bvup",
+                          "fill": "#0F1724",
+                          "content": "Role 1",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "IlzKU",
+                      "fill": "#D1FAE5",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "JMWHO",
+                          "fill": "#047857",
+                          "content": "connected",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kViU4",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "VZahl",
+                          "fill": "#5C6676",
+                          "content": "12 msgs",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.2
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "RJrZg",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "#E5EBE3",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "u4rMu",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "eXqvx",
+                          "width": 36,
+                          "height": 36,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Cunyp",
+                              "fill": "#5C6676",
+                              "content": "A",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "SjRGb",
+                          "width": 520,
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 20,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "layout": "vertical",
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "KjiSy",
+                              "fill": "#0F1724",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "你好，我已经准备好接收来自 provider 的消息流。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "HrjQk",
+                      "width": "fill_container",
+                      "justifyContent": "end",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "RDESw",
+                          "width": 460,
+                          "fill": "#95EC69",
+                          "cornerRadius": 20,
+                          "layout": "vertical",
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "OE73W",
+                              "fill": "#0F1724",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "很好，我们开始同步对话。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wnAPe",
+                      "layoutPosition": "absolute",
+                      "x": 392,
+                      "y": 329,
+                      "name": "Create Group Modal",
+                      "width": "fill_container(0)",
+                      "height": "fill_container(0)",
+                      "fill": "#0000004D",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "UQfxU",
+                          "width": 460,
+                          "fill": "#FFFAF3",
+                          "cornerRadius": 24,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "effect": {
+                            "type": "shadow",
+                            "shadowType": "outer",
+                            "color": "#0C12141A",
+                            "offset": {
+                              "x": 0,
+                              "y": 20
+                            },
+                            "blur": 60
+                          },
+                          "layout": "vertical",
+                          "gap": 12,
+                          "padding": 24,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "GXDIq",
+                              "fill": "#0F1724",
+                              "content": "新增群组",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 20,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "T1qcU",
+                              "fill": "#5C6676",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "请输入群组名称，创建后会显示在左侧列表。",
+                              "lineHeight": 1.6,
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "JnYYF",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 6,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ek10W",
+                                  "fill": "#5C6676",
+                                  "content": "群组名称",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "TB4I3",
+                                  "width": "fill_container",
+                                  "height": 44,
+                                  "fill": "#FFFFFFCC",
+                                  "cornerRadius": 18,
+                                  "stroke": {
+                                    "thickness": 1,
+                                    "fill": "#0000001A"
+                                  },
+                                  "padding": [
+                                    10,
+                                    14
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "SSBWJ",
+                                      "fill": "#5C6676",
+                                      "content": "例如：外部渠道同步",
+                                      "fontFamily": "PingFang SC",
+                                      "fontSize": 13,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "p1k0v",
+                              "width": "fill_container",
+                              "gap": 8,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "dZame",
+                                  "width": "fill_container",
+                                  "height": 40,
+                                  "cornerRadius": 999,
+                                  "stroke": {
+                                    "thickness": 1,
+                                    "fill": "#0000001A"
+                                  },
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "ZE8S7",
+                                      "fill": "#0F1724",
+                                      "content": "取消",
+                                      "fontFamily": "PingFang SC",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "TCvzN",
+                                  "width": "fill_container",
+                                  "height": 40,
+                                  "fill": "#0F1724",
+                                  "cornerRadius": 999,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "uHFO5",
+                                      "fill": "#FFFAF3",
+                                      "content": "创建群组",
+                                      "fontFamily": "PingFang SC",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "F67qV",
+                  "width": "fill_container",
+                  "fill": "#FFFAF3",
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#00000014"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "nYdgy",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 10,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lgd3R",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "和 Role 1 对话。支持图片、音频、视频、文档一起上传。",
+                          "lineHeight": 1.6,
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "kxe0Y",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "EdRl9",
+                              "cornerRadius": 999,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "#0000001A"
+                              },
+                              "padding": [
+                                8,
+                                14
+                              ],
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "jXozu",
+                                  "fill": "#0F1724",
+                                  "content": "上传",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "eBIwL",
+                              "fill": "#F1E9DC",
+                              "cornerRadius": 999,
+                              "padding": [
+                                6,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "5Dv8l",
+                                  "fill": "#5C6676",
+                                  "content": "已选 2 个文件",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "UgaCm",
+                              "fill": "#0F1724",
+                              "cornerRadius": 999,
+                              "padding": [
+                                8,
+                                16
+                              ],
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "OuzH5",
+                                  "fill": "#FFFAF3",
+                                  "content": "发送",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "OIkt6",
+                      "width": "fill_container",
+                      "fill": "#FEF2F2",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FECACA"
+                      },
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "JeuWp",
+                          "fill": "#B91C1C",
+                          "content": "文件过大，单次单文件上传不能超过 10MB。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "chat-page-group",
+      "x": 0,
+      "y": 1686,
+      "name": "Chat Page (Group A Selected)",
+      "width": 1440,
+      "height": 900,
+      "fill": [
+        {
+          "type": "gradient",
+          "gradientType": "radial",
+          "enabled": true,
+          "rotation": 0,
+          "size": {
+            "width": 1,
+            "height": 1
+          },
+          "colors": [
+            {
+              "color": "#E8691830",
+              "position": 0
+            },
+            {
+              "color": "#00000000",
+              "position": 1
+            }
+          ],
+          "center": {
+            "x": 0.08,
+            "y": 0.08
+          }
+        },
+        {
+          "type": "gradient",
+          "gradientType": "radial",
+          "enabled": true,
+          "rotation": 0,
+          "size": {
+            "width": 1,
+            "height": 1
+          },
+          "colors": [
+            {
+              "color": "#26968933",
+              "position": 0
+            },
+            {
+              "color": "#00000000",
+              "position": 1
+            }
+          ],
+          "center": {
+            "x": 0.92,
+            "y": 0.9
+          }
+        },
+        "#F4EFE6"
+      ],
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 16,
+      "children": [
+        {
+          "type": "frame",
+          "id": "Uurv8",
+          "width": "fill_container",
+          "height": "fill_container",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "yM88G",
+              "width": 320,
+              "height": "fill_container",
+              "fill": "#FFFAF3",
+              "cornerRadius": 30,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#00000014"
+              },
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#0C12141F",
+                "offset": {
+                  "x": 0,
+                  "y": 24
+                },
+                "blur": 80
+              },
+              "layout": "vertical",
+              "gap": 12,
+              "padding": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "wLrv2",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "TsnE4",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "fbL2H",
+                          "fill": "#5C6676",
+                          "content": "roles",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 2.2
+                        },
+                        {
+                          "type": "text",
+                          "id": "kiBwK",
+                          "fill": "#0F1724",
+                          "content": "角色列表",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 20,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Q91HD",
+                      "width": 40,
+                      "height": 40,
+                      "cornerRadius": 16,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Q3QF6",
+                          "fill": "#5C6676",
+                          "content": "×",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 16,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "fwm4f",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "L7ArG",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#0F1724",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "JWkkF",
+                          "fill": "#FFFAF3",
+                          "content": "新增角色",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "HMEpD",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#0F1724",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "cpt3k",
+                          "fill": "#FFFAF3",
+                          "content": "新增群组",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "mKAxx",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "yvJKt",
+                      "width": "fill_container",
+                      "fill": "#FFFAF3",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "g9zII",
+                          "fill": "#0F1724",
+                          "content": "Role 1",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "nWPNR",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "最近一次回复摘要会出现在这里。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "qRAg2",
+                      "width": "fill_container",
+                      "fill": "#FFFAF3",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "x0YZH",
+                          "fill": "#0F1724",
+                          "content": "Role 2",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "niXCI",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "等待新的消息进入。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "6bBcp",
+                      "width": "fill_container",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 18,
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "KYktr",
+                          "fill": "#0F1724",
+                          "content": "群组 A",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "7FuDr",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "群组最新消息会显示在这里。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "sidebar-group-roles",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "padding": [
+                            4,
+                            8
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "sidebar-group-role-1",
+                              "fill": "#0F1724",
+                              "content": "角色 1",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "sidebar-group-role-2",
+                              "fill": "#0F1724",
+                              "content": "角色 2",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "U015a",
+                  "width": "fill_container",
+                  "fill": "#F1E9DC",
+                  "cornerRadius": 24,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "pNmWg",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "6cwea",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mXMbV",
+                              "fill": "#0F1724",
+                              "content": "管理员",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "viAvY",
+                              "gap": 6,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "hYgKs",
+                                  "width": 10,
+                                  "height": 10,
+                                  "fill": "#10B981",
+                                  "cornerRadius": 999
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "fHktA",
+                                  "fill": "#5C6676",
+                                  "content": "Connected",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "5RfuT",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": 999,
+                          "padding": [
+                            6,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "m34tR",
+                              "fill": "#5C6676",
+                              "content": "2 roles",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dTk7D",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "683q5",
+                          "width": "fill_container",
+                          "height": 36,
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#0000001A"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "MQeiZ",
+                              "fill": "#0F1724",
+                              "content": "新增",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "v1a4p",
+                          "width": "fill_container",
+                          "height": 36,
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#0000001A"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Qwb00",
+                              "fill": "#0F1724",
+                              "content": "退出",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "GkI4j",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "#FFFAF3",
+              "cornerRadius": 32,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#00000014"
+              },
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#0C121414",
+                "offset": {
+                  "x": 0,
+                  "y": 24
+                },
+                "blur": 80
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "M2yZF",
+                  "width": "fill_container",
+                  "fill": "#FFFAF3",
+                  "gap": 8,
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "EGInW",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wvL7F",
+                          "fill": "#0F1724",
+                          "content": "列表",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "1Dz6Q",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "gap": 6,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "9VvZ7",
+                          "fill": "#0F1724",
+                          "content": "群组 A",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Kc3ky",
+                      "fill": "#D1FAE5",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "gcUuk",
+                          "fill": "#047857",
+                          "content": "connected",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "WKrhq",
+                      "fill": "#F1E9DC",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "97muN",
+                          "fill": "#5C6676",
+                          "content": "12 msgs",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "chat-add-role",
+                      "fill": "#0F1724",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "chat-add-role-text",
+                          "fill": "#FFFAF3",
+                          "content": "添加角色",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "chat-manage-roles",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "chat-manage-roles-text",
+                          "fill": "#0F1724",
+                          "content": "角色管理",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 10,
+                          "fontWeight": "600",
+                          "letterSpacing": 1.2
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "1QO8q",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "#E5EBE3",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "msg-user-mention",
+                      "layout": "horizontal",
+                      "justifyContent": "end",
+                      "width": "fill_container",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "msg-user-mention-bubble",
+                          "layout": "vertical",
+                          "width": 520,
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "cornerRadius": 20,
+                          "fill": "#95EC69",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "msg-user-mention-text",
+                              "content": "@角色1 @角色2 请确认群组消息接收。",
+                              "fontSize": 14,
+                              "lineHeight": 1.6,
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "fill": "#0F1724",
+                              "fontFamily": "PingFang SC"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "msg-role-1",
+                      "layout": "horizontal",
+                      "gap": 10,
+                      "alignItems": "end",
+                      "width": "fill_container",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "msg-role-1-avatar",
+                          "width": 36,
+                          "height": 36,
+                          "cornerRadius": 999,
+                          "fill": "#FFFFFF",
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "layout": "horizontal",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "msg-role-1-avatar-text",
+                              "content": "1",
+                              "fontSize": 12,
+                              "fontWeight": "600",
+                              "fill": "#5C6676",
+                              "fontFamily": "PingFang SC"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "msg-role-1-bubble",
+                          "layout": "vertical",
+                          "width": 520,
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "cornerRadius": 20,
+                          "fill": "#FFFFFF",
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "msg-role-1-text",
+                              "content": "@我 已收到群组消息，角色1准备处理并同步结果。",
+                              "fontSize": 14,
+                              "lineHeight": 1.6,
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "fill": "#0F1724",
+                              "fontFamily": "PingFang SC"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "msg-role-2",
+                      "layout": "horizontal",
+                      "gap": 10,
+                      "alignItems": "end",
+                      "width": "fill_container",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "msg-role-2-avatar",
+                          "width": 36,
+                          "height": 36,
+                          "cornerRadius": 999,
+                          "fill": "#FFFFFF",
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "layout": "horizontal",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "msg-role-2-avatar-text",
+                              "content": "2",
+                              "fontSize": 12,
+                              "fontWeight": "600",
+                              "fill": "#5C6676",
+                              "fontFamily": "PingFang SC"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "msg-role-2-bubble",
+                          "layout": "vertical",
+                          "width": 520,
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "cornerRadius": 20,
+                          "fill": "#FFFFFF",
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#00000014"
+                          },
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "msg-role-2-text",
+                              "content": "@我 收到。角色2将开始处理并回传结果。",
+                              "fontSize": 14,
+                              "lineHeight": 1.6,
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "fill": "#0F1724",
+                              "fontFamily": "PingFang SC"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "eRZRg",
+                  "width": "fill_container",
+                  "fill": "#FFFAF3",
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#00000014"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    12,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "7aBbZ",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#00000014"
+                      },
+                      "layout": "vertical",
+                      "gap": 10,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "smOlH",
+                          "fill": "#5C6676",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "和 Role 1 对话。支持图片、音频、视频、文档一起上传。",
+                          "lineHeight": 1.6,
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "JJqBO",
+                          "width": "fill_container",
+                          "layout": "horizontal",
+                          "justifyContent": "space_between",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "vf6aL",
+                              "layout": "horizontal",
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "Uet9p",
+                                  "cornerRadius": 999,
+                                  "stroke": {
+                                    "thickness": 1,
+                                    "fill": "#0000001A"
+                                  },
+                                  "padding": [
+                                    8,
+                                    14
+                                  ],
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "SquZR",
+                                      "fill": "#0F1724",
+                                      "content": "上传",
+                                      "fontFamily": "PingFang SC",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "mtSPj",
+                                  "fill": "#F1E9DC",
+                                  "cornerRadius": 999,
+                                  "padding": [
+                                    6,
+                                    12
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "4hszj",
+                                      "fill": "#5C6676",
+                                      "content": "已选 2 个文件",
+                                      "fontFamily": "PingFang SC",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "IHpoB",
+                              "fill": "#0F1724",
+                              "cornerRadius": 999,
+                              "padding": [
+                                8,
+                                16
+                              ],
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "QctAs",
+                                  "fill": "#FFFAF3",
+                                  "content": "发送",
+                                  "fontFamily": "PingFang SC",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "JTF21",
+                      "width": "fill_container",
+                      "fill": "#FEF2F2",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FECACA"
+                      },
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "07zqh",
+                          "fill": "#B91C1C",
+                          "content": "文件过大，单次单文件上传不能超过 10MB。",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "group-role-note",
+          "layoutPosition": "absolute",
+          "x": 980,
+          "y": 80,
+          "width": 300,
+          "fill": "#FFFFFF",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "#00000014"
+          },
+          "layout": "vertical",
+          "padding": [
+            10,
+            12
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "group-role-note-text",
+              "fill": "#5C6676",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "说明：点击“添加角色”后弹出该窗口。创建的角色只会出现在“群组A”下方，不会出现在左侧角色列表。群组内多个 agent 默认不主动发言，仅在消息中被 @ 后接收并处理，再以被 @ 的角色身份回复（可能回复给其他角色或你）。",
+              "lineHeight": 1.6,
+              "fontFamily": "PingFang SC",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "create-group-role-modal",
+          "name": "Create Role In Group Modal",
+          "layoutPosition": "absolute",
+          "x": 0,
+          "y": 0,
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "#0000004D",
+          "layout": "horizontal",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "create-group-role-card",
+              "width": 460,
+              "fill": "#FFFAF3",
+              "cornerRadius": 24,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#00000014"
+              },
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "offset": {
+                  "x": 0,
+                  "y": 20
+                },
+                "blur": 60,
+                "color": "#0C12141A"
+              },
+              "layout": "vertical",
+              "gap": 12,
+              "padding": [
+                24,
+                24
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "create-group-role-title",
+                  "fill": "#0F1724",
+                  "content": "添加角色",
+                  "fontFamily": "PingFang SC",
+                  "fontSize": 20,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "create-group-role-desc",
+                  "fill": "#5C6676",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "角色会添加到群组A内，不会出现在左侧角色列表。",
+                  "lineHeight": 1.6,
+                  "fontFamily": "PingFang SC",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "create-group-role-name-field",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "create-group-role-name-label",
+                      "fill": "#5C6676",
+                      "content": "角色名称",
+                      "fontFamily": "PingFang SC",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "create-group-role-name-input",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#FFFFFFCC",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "padding": [
+                        10,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "create-group-role-name-placeholder",
+                          "fill": "#5C6676",
+                          "content": "例如：渠道响应助手",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "create-group-role-agent-field",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "create-group-role-agent-label",
+                      "fill": "#5C6676",
+                      "content": "选择 Agent",
+                      "fontFamily": "PingFang SC",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "create-group-role-agent-select",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#FFFFFFCC",
+                      "cornerRadius": 18,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "layout": "horizontal",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "padding": [
+                        10,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "create-group-role-agent-value",
+                          "fill": "#0F1724",
+                          "content": "Main",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "create-group-role-agent-caret",
+                          "fill": "#5C6676",
+                          "content": "▾",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "create-group-role-actions",
+                  "width": "fill_container",
+                  "layout": "horizontal",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "create-group-role-cancel",
+                      "width": "fill_container",
+                      "height": 40,
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#0000001A"
+                      },
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "create-group-role-cancel-text",
+                          "fill": "#0F1724",
+                          "content": "取消",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "create-group-role-submit",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "#0F1724",
+                      "cornerRadius": 999,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "create-group-role-submit-text",
+                          "fill": "#FFFAF3",
+                          "content": "创建",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "manage-group-roles-modal",
+      "x": 522,
+      "y": 1487,
+      "name": "Manage Group Roles Modal",
+      "width": "fill_container(0)",
+      "height": "fill_container(0)",
+      "fill": "#0000004D",
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "manage-group-roles-card",
+          "width": 520,
+          "fill": "#FFFAF3",
+          "cornerRadius": 24,
+          "stroke": {
+            "thickness": 1,
+            "fill": "#00000014"
+          },
+          "effect": {
+            "type": "shadow",
+            "shadowType": "outer",
+            "color": "#0C12141A",
+            "offset": {
+              "x": 0,
+              "y": 20
+            },
+            "blur": 60
+          },
+          "layout": "vertical",
+          "gap": 12,
+          "padding": 24,
+          "children": [
+            {
+              "type": "text",
+              "id": "manage-group-roles-title",
+              "fill": "#0F1724",
+              "content": "角色管理",
+              "fontFamily": "PingFang SC",
+              "fontSize": 20,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "manage-group-roles-desc",
+              "fill": "#5C6676",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "管理群组内角色。移除角色只影响后续消息，历史消息仍保留。",
+              "lineHeight": 1.6,
+              "fontFamily": "PingFang SC",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "manage-group-roles-list",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "manage-role-item-1",
+                  "width": "fill_container",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#00000014"
+                  },
+                  "padding": [
+                    10,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "manage-role-item-1-meta",
+                      "layout": "horizontal",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "manage-role-item-1-text",
+                          "fill": "#0F1724",
+                          "content": "角色 1",
+                          "fontFamily": "PingFang SC",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "manage-role-item-1-leader-badge",
+                          "fill": "#DCFCE7",
+                          "cornerRadius": 999,
+                          "padding": [
+                            4,
+                            8
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "manage-role-item-1-leader-badge-text",
+                              "fill": "#166534",
+                              "content": "Leader",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 10,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "manage-role-item-1-actions",
+                      "layout": "horizontal",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "manage-role-item-1-del",
+                          "fill": "#FEF2F2",
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#FECACA"
+                          },
+                          "padding": [
+                            6,
+                            10
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "manage-role-item-1-del-text",
+                              "fill": "#B91C1C",
+                              "content": "移除",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "manage-role-item-2",
+                  "width": "fill_container",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#00000014"
+                  },
+                  "padding": [
+                    10,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "manage-role-item-2-text",
+                      "fill": "#0F1724",
+                      "content": "角色 2",
+                      "fontFamily": "PingFang SC",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "manage-role-item-2-actions",
+                      "layout": "horizontal",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "manage-role-item-2-set-leader",
+                          "fill": "#EFF6FF",
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#BFDBFE"
+                          },
+                          "padding": [
+                            6,
+                            10
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "manage-role-item-2-set-leader-text",
+                              "fill": "#1D4ED8",
+                              "content": "设为 Leader",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "manage-role-item-2-del",
+                          "fill": "#FEF2F2",
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#FECACA"
+                          },
+                          "padding": [
+                            6,
+                            10
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "manage-role-item-2-del-text",
+                              "fill": "#B91C1C",
+                              "content": "移除",
+                              "fontFamily": "PingFang SC",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "manage-group-roles-actions",
+              "width": "fill_container",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "manage-group-roles-close",
+                  "width": "fill_container",
+                  "height": 40,
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#0000001A"
+                  },
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "manage-group-roles-close-text",
+                      "fill": "#0F1724",
+                      "content": "关闭",
+                      "fontFamily": "PingFang SC",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

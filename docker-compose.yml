@@ -1,0 +1,29 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      APP_BASE_URL: ${APP_BASE_URL:-http://127.0.0.1:3000}
+      APP_SESSION_SECRET: ${APP_SESSION_SECRET:-replace-me-with-a-long-random-secret}
+      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@example.com}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-ChangeMe123!}
+      APP_ADMIN_NAME: ${APP_ADMIN_NAME:-Channel Admin}
+      APP_AGENT_CATALOG: ${APP_AGENT_CATALOG:-[{"id":"main","name":"Main"}]}
+      CUSTOMCHAT_PROVIDER_BASE_URL: ${CUSTOMCHAT_PROVIDER_BASE_URL:-http://127.0.0.1:18789}
+      CUSTOMCHAT_PROVIDER_TOKEN: ${CUSTOMCHAT_PROVIDER_TOKEN:-change-me-provider-token}
+      CUSTOMCHAT_PROVIDER_INGRESS_PATH: ${CUSTOMCHAT_PROVIDER_INGRESS_PATH:-/customchat/inbound}
+      CUSTOMCHAT_SHARED_SECRET: ${CUSTOMCHAT_SHARED_SECRET:-your-shared-scret}
+      GROUP_ROLE_WATCHDOG_INTERVAL_MS: ${GROUP_ROLE_WATCHDOG_INTERVAL_MS:-30000}
+      GROUP_ROLE_BUSY_INSPECT_AFTER_MS: ${GROUP_ROLE_BUSY_INSPECT_AFTER_MS:-300000}
+      GROUP_ROLE_BUSY_ABORT_AFTER_MS: ${GROUP_ROLE_BUSY_ABORT_AFTER_MS:-600000}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_DEBUG_LOG_FILE: ${APP_DEBUG_LOG_FILE:-}
+    volumes:
+      - ./storage:/app/storage
+    restart: unless-stopped
