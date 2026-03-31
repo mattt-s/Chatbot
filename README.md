@@ -898,6 +898,73 @@ lifecycle end                 → lifecycle fallback 触发
 
 `event:chat` 从未出现。lifecycle fallback 是这类 run 唯一的兜底 finalize 机制。
 
+### 7. 气泡底部的 Session 信息
+
+assistant 气泡底部会展示一行精简的 session 摘要，例如：
+
+```text
+Doudou 🐶 · 23:47:57 · gpt-5.2 · 19.2k/272k (7%)
+```
+
+若当前 session 的 compaction 次数大于 0，则会额外显示：
+
+```text
+... · cpt: 2
+```
+
+#### 展示规则
+
+- 只展示在 assistant 气泡下，不展示在用户自己发送的消息下
+- 只展示在同一角色连续回复分组的**最后一个**气泡下
+- `cpt` 只有在 `compactions > 0` 时才显示；`0` 时隐藏
+- 不展示 `sessionKey`
+
+#### 数据获取链路
+
+当前这行信息不是前端临时算出来的，而是在 assistant 消息终态后补查并写回消息记录：
+
+1. assistant 消息进入终态（`final / aborted / error`）
+2. app 在 `ingestCustomChatDelivery` 中调用 provider：
+   `GET /customchat/status`
+3. `customchat` 插件根据 `panelId / agentId / target / sessionKey` 定位真实 session
+4. 插件优先读取 OpenClaw session store：
+   `~/.openclaw/agents/<agentId>/sessions/sessions.json`
+5. 用 sessionKey 取出对应记录，拼成一段 `statusText`
+6. app 解析这段 `statusText`，提取：
+   - `model`
+   - `context used / max / percent`
+   - `compactions`
+7. 结果写入消息的 `sessionMeta`
+8. SSE 把带 `sessionMeta` 的消息事件推给浏览器
+
+因为 `sessionMeta` 已经入库，所以：
+
+- 刷新页面后不会丢
+- 旧消息会按当时入库的值显示
+- 修改展示文案（如 `Compactions` -> `cpt`）不需要改存储结构
+
+#### 为什么不用 `inspect` 直接展示
+
+`/customchat/session` 的 inspect 结果主要用于群组 watchdog / 运行态核验（session 是否存在、是否终态等），不再用于底部 Context 展示。
+
+底部这行 session 信息现在走的是独立的 `/customchat/status` 链路，避免把 runtime snapshot 中无关数字误识别成：
+
+- Context
+- Compactions
+
+#### 当前使用的核心字段
+
+session store 中当前实际会用到的字段包括：
+
+- `model`
+- `modelProvider`
+- `totalTokens`
+- `contextTokens`
+- `compactionCount`
+- `authProfileOverrideCompactionCount`（兜底）
+
+插件会把它们组装成与 OpenClaw `/status` 风格接近的文本，再由 app 做解析和展示。
+
 ## 十三、文件/附件处理
 
 ### 1. 完整流程

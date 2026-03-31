@@ -659,7 +659,7 @@ export async function clearPanelMessages(userId: string, panelId: string) {
 
     await deleteStoredFiles(attachmentPaths);
 
-    return panelToView(panel, []);
+    return panelToView(panel, [], { groupRoles: draft.groupRoles });
   });
 }
 
