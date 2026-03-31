@@ -1,41 +1,8 @@
 import type { MessageSessionMeta } from "@/lib/types";
 
-type JsonRecord = Record<string, unknown>;
-
-function asRecord(value: unknown): JsonRecord | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as JsonRecord;
-}
-
-function readFiniteNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return null;
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed || null;
-}
-
-function normalizeModelName(value: unknown) {
-  const raw = readString(value);
+function readModelLine(statusText: string) {
+  const match = /^\s*.*Model:\s*(.+?)(?:\s*·.*)?$/im.exec(statusText);
+  const raw = match?.[1]?.trim();
   if (!raw) {
     return null;
   }
@@ -43,57 +10,43 @@ function normalizeModelName(value: unknown) {
   return raw.split("/").pop()?.trim() || raw;
 }
 
-export function extractMessageSessionMeta(input: {
-  snapshot?: unknown;
-}): MessageSessionMeta | null {
-  const snapshot = asRecord(input.snapshot);
-  if (!snapshot) {
+function parseCompactTokenCount(raw: string) {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) {
     return null;
   }
 
-  const snapshotRaw = asRecord(snapshot.raw);
+  if (trimmed.endsWith("k")) {
+    const base = Number(trimmed.slice(0, -1));
+    return Number.isFinite(base) ? Math.round(base * 1000) : null;
+  }
 
-  const model =
-    normalizeModelName(snapshot.model) ??
-    normalizeModelName(snapshotRaw?.model) ??
-    normalizeModelName(snapshot.modelName) ??
-    normalizeModelName(snapshotRaw?.modelName) ??
-    normalizeModelName(snapshot.providerModel) ??
-    normalizeModelName(snapshotRaw?.providerModel) ??
-    normalizeModelName(snapshot.resolvedModel);
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
-  const contextUsedTokens =
-    readFiniteNumber(snapshot.totalTokens) ??
-    readFiniteNumber(snapshotRaw?.totalTokens) ??
-    readFiniteNumber(snapshot.totalTokenCount) ??
-    readFiniteNumber(snapshotRaw?.totalTokenCount) ??
-    null;
-  const contextMaxTokens =
-    readFiniteNumber(snapshot.contextTokens) ??
-    readFiniteNumber(snapshotRaw?.contextTokens) ??
-    readFiniteNumber(snapshot.contextWindow) ??
-    readFiniteNumber(snapshotRaw?.contextWindow) ??
-    readFiniteNumber(snapshot.contextLimit) ??
-    readFiniteNumber(snapshotRaw?.contextLimit) ??
-    null;
-  const compactions =
-    readFiniteNumber(snapshot.compactionCount) ??
-    readFiniteNumber(snapshotRaw?.compactionCount) ??
-    readFiniteNumber(snapshot.compactions) ??
-    readFiniteNumber(snapshotRaw?.compactions) ??
-    readFiniteNumber(snapshot.authProfileOverrideCompactionCount) ??
-    readFiniteNumber(snapshotRaw?.authProfileOverrideCompactionCount) ??
-    null;
+export function extractMessageSessionMeta(input: {
+  statusText?: string | null;
+}): MessageSessionMeta | null {
+  const statusText = input.statusText?.trim();
+  if (!statusText) {
+    return null;
+  }
 
-  const contextPercent =
-    contextUsedTokens != null && contextMaxTokens != null && contextMaxTokens > 0
-      ? Math.max(0, Math.min(100, Math.round((contextUsedTokens / contextMaxTokens) * 100)))
-      : null;
+  const model = readModelLine(statusText);
+  const contextMatch = /Context:\s*([0-9.]+k?)\/([0-9.]+k?)\s*\((\d+)%\)/i.exec(statusText);
+  const compactionMatch = /Compactions:\s*(\d+)/i.exec(statusText);
+
+  const contextUsedTokens = contextMatch ? parseCompactTokenCount(contextMatch[1] || "") : null;
+  const contextMaxTokens = contextMatch ? parseCompactTokenCount(contextMatch[2] || "") : null;
+  const contextPercent = contextMatch ? Number(contextMatch[3]) : null;
+  const compactions = compactionMatch ? Number(compactionMatch[1]) : null;
 
   if (
     model == null &&
     contextUsedTokens == null &&
     contextMaxTokens == null &&
+    contextPercent == null &&
     compactions == null
   ) {
     return null;

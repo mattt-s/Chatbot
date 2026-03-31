@@ -37,7 +37,7 @@ import {
   upsertAssistantMessage,
   upsertAssistantRuntimeSteps,
 } from "@/lib/store";
-import { inspectProviderSession } from "@/lib/customchat-provider";
+import { readProviderSessionStatus } from "@/lib/customchat-provider";
 import { extractMessageSessionMeta } from "@/lib/session-status";
 import {
   attachmentToView,
@@ -338,7 +338,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
       ? toCustomChatGroupRoleTarget(panel.id, groupRoleId)
       : `channel:${panel.id}`;
     const inspectionAgentId = senderAgentId || panel.agentId;
-    const inspection = await inspectProviderSession({
+    const statusResult = await readProviderSessionStatus({
       panelId: panel.id,
       agentId: inspectionAgentId,
       target: inspectionTarget,
@@ -346,7 +346,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
     }).catch(() => null);
 
     sessionMeta = extractMessageSessionMeta({
-      snapshot: inspection?.snapshot,
+      statusText: statusResult?.statusText,
     });
 
     if (sessionMeta) {

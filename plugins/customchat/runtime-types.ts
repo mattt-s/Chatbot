@@ -58,6 +58,14 @@ export type CustomChatSessionInspection = {
   source: "runtime" | "gateway-fallback";
 };
 
+export type CustomChatSessionStatus = {
+  target: string | null;
+  sessionKey: string | null;
+  exists: boolean;
+  statusText: string | null;
+  source: "session-store" | "gateway-fallback";
+};
+
 export type CustomChatAbortResult = {
   ok: true;
   target: string;
@@ -80,4 +88,3 @@ export type CustomChatRuntimeStatus = {
   lastSubscriberErrorAtMs: number | null;
   lastSubscriberErrorMessage: string | null;
 };
-

@@ -152,6 +152,65 @@ export async function inspectProviderSession(input: {
   return payload;
 }
 
+export async function readProviderSessionStatus(input: {
+  panelId: string;
+  agentId: string;
+  runId?: string | null;
+  sessionKey?: string | null;
+  target?: string;
+}) {
+  const effectiveTarget = input.target || `channel:${input.panelId}`;
+  log.input("readProviderSessionStatus", {
+    panelId: input.panelId,
+    agentId: input.agentId,
+    target: effectiveTarget,
+    runId: input.runId ?? "null",
+  });
+
+  const query = new URLSearchParams();
+  query.set("panelId", input.panelId);
+  query.set("agentId", input.agentId);
+  query.set("target", effectiveTarget);
+  if (input.runId?.trim()) {
+    query.set("runId", input.runId.trim());
+  }
+  if (input.sessionKey?.trim()) {
+    query.set("sessionKey", input.sessionKey.trim());
+  }
+
+  const response = await fetch(`${buildProviderBaseUrl()}/customchat/status?${query.toString()}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${readProviderToken()}`,
+    },
+    cache: "no-store",
+  });
+
+  const payload = await readProviderPayload<{
+    error?: string;
+    ok?: boolean;
+    exists?: boolean;
+    sessionKey?: string | null;
+    statusText?: string | null;
+    source?: "session-store" | "gateway-fallback";
+  }>(response);
+
+  if (!response.ok) {
+    log.error("readProviderSessionStatus", new Error(payload?.error ?? "session status failed"), {
+      panelId: input.panelId,
+      status: String(response.status),
+    });
+    throw new Error(payload?.error ?? "customchat provider session status failed.");
+  }
+
+  log.output("readProviderSessionStatus", {
+    panelId: input.panelId,
+    exists: String(payload?.exists),
+    source: payload?.source ?? "unknown",
+  });
+  return payload;
+}
+
 /**
  * 中止 Provider 端正在运行的 Agent run
  * @param {object} input - 中止参数

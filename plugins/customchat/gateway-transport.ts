@@ -1,9 +1,13 @@
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import {
   type JsonRecord,
   type SessionSnapshot,
+  asJsonRecord,
   sleep,
   flattenSessionRecords,
   parseJsonOutput,
@@ -18,6 +22,11 @@ const DEFAULT_OPENCLAW_BIN =
   "openclaw";
 const SESSION_RESOLVE_ATTEMPTS = 6;
 const SESSION_RESOLVE_BACKOFF_MS = [200, 350, 600, 900, 1300, 1800];
+
+function extractAgentIdFromSessionKey(sessionKey: string) {
+  const match = /^agent:([^:]+):/.exec(sessionKey.trim());
+  return match?.[1]?.trim() || null;
+}
 
 async function dispatchGatewayRequest(
   method: string,
@@ -185,4 +194,34 @@ export async function resolveActualSessionKey(input: {
   }
 
   return null;
+}
+
+export async function readGatewaySessionRecord(sessionKey: string): Promise<JsonRecord | null> {
+  const normalized = sessionKey.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const agentId = extractAgentIdFromSessionKey(normalized);
+  if (!agentId) {
+    return null;
+  }
+
+  const sessionStorePath = path.join(os.homedir(), ".openclaw", "agents", agentId, "sessions", "sessions.json");
+
+  try {
+    const payload = JSON.parse(await fs.readFile(sessionStorePath, "utf8")) as unknown;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return null;
+    }
+
+    const record = (payload as Record<string, unknown>)[normalized];
+    if (!record || typeof record !== "object" || Array.isArray(record)) {
+      return null;
+    }
+
+    return asJsonRecord(record);
+  } catch {
+    return null;
+  }
 }

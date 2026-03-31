@@ -80,6 +80,7 @@ import type {
   CustomChatAbortResult,
   CustomChatControlParams,
   CustomChatSessionInspection,
+  CustomChatSessionStatus,
   TrackedRun,
 } from "./runtime-types.js";
 import {
@@ -91,6 +92,7 @@ import {
   deleteGatewaySession,
   fetchGatewayChatHistory,
   listGatewaySessions,
+  readGatewaySessionRecord,
   resolveActualSessionKey,
   sendGatewayChatTurn,
   waitForGatewayRun,
@@ -255,6 +257,7 @@ const DEFAULT_INGRESS_PATH =
 const DEFAULT_AGENTS_PATH = "/customchat/agents";
 const DEFAULT_AGENT_AVATAR_PATH = "/customchat/agent-avatar";
 const DEFAULT_SESSION_PATH = "/customchat/session";
+const DEFAULT_STATUS_PATH = "/customchat/status";
 const DEFAULT_ABORT_PATH = "/customchat/abort";
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const ACTIVE_RUN_RECOVERY_INTERVAL_MS = 60_000;
@@ -275,6 +278,103 @@ function resolveTargetFromControlParams(input: CustomChatControlParams) {
 
 export function getCustomChatRuntimeStatus() {
   return getCustomChatRuntimeStatusSummary();
+}
+
+function readNumericSessionField(record: JsonRecord, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function compactTokenCount(value: number) {
+  if (value < 1000) {
+    return String(value);
+  }
+
+  const kilo = value / 1000;
+  if (kilo >= 100 || Number.isInteger(kilo)) {
+    return `${Math.round(kilo)}k`;
+  }
+
+  return `${kilo.toFixed(1).replace(/\.0$/, "")}k`;
+}
+
+function buildSessionStatusText(record: JsonRecord) {
+  const model = extractStringValue(record.model);
+  const modelProvider = extractStringValue(record.modelProvider);
+  const totalTokens = readNumericSessionField(record, "totalTokens");
+  const contextTokens = readNumericSessionField(record, "contextTokens");
+  const compactions =
+    readNumericSessionField(record, "compactionCount") ??
+    readNumericSessionField(record, "authProfileOverrideCompactionCount") ??
+    0;
+
+  const modelLabel =
+    model && modelProvider
+      ? `${modelProvider}/${model}`
+      : model ?? modelProvider ?? null;
+
+  const lines: string[] = [];
+
+  if (modelLabel) {
+    lines.push(`🧠 Model: ${modelLabel}`);
+  }
+
+  if (totalTokens != null && contextTokens != null && contextTokens > 0) {
+    const percent = Math.max(0, Math.min(100, Math.round((totalTokens / contextTokens) * 100)));
+    lines.push(
+      `📚 Context: ${compactTokenCount(totalTokens)}/${compactTokenCount(contextTokens)} (${percent}%) · 🧹 Compactions: ${compactions}`,
+    );
+  } else {
+    lines.push(`📚 Context: unavailable · 🧹 Compactions: ${compactions}`);
+  }
+
+  return lines.join("\n");
+}
+
+export async function readCustomChatSessionStatus(
+  input: CustomChatControlParams,
+): Promise<CustomChatSessionStatus> {
+  const target = resolveTargetFromControlParams(input);
+  const sessionKeyHint = input.sessionKey?.trim() || null;
+
+  if (!target && !sessionKeyHint) {
+    throw new Error("target or sessionKey is required.");
+  }
+
+  const remembered = await findRouteBinding({
+    target: target || undefined,
+    sessionKey: sessionKeyHint,
+  });
+  const agentId = input.agentId?.trim() || remembered?.agentId || "main";
+  const sessionKey =
+    normalizeSessionKeyCandidate(sessionKeyHint) ||
+    normalizeSessionKeyCandidate(remembered?.sessionKey) ||
+    normalizeSessionKeyCandidate(remembered?.expectedSessionKey) ||
+    (target ? buildCanonicalSessionKey(agentId, target) : null);
+
+  const rawRecord = sessionKey ? await readGatewaySessionRecord(sessionKey) : null;
+  if (rawRecord) {
+    return {
+      target,
+      sessionKey,
+      exists: true,
+      statusText: buildSessionStatusText(rawRecord),
+      source: "session-store",
+    };
+  }
+
+  const snapshots = await listGatewaySessions().catch(() => []);
+  const snapshot = sessionKey
+    ? snapshots.find((candidate) => candidate.key === sessionKey) ?? null
+    : null;
+
+  return {
+    target,
+    sessionKey,
+    exists: Boolean(snapshot),
+    statusText: snapshot ? buildSessionStatusText(snapshot.raw) : null,
+    source: "gateway-fallback",
+  };
 }
 
 export async function inspectCustomChatSession(
@@ -2712,6 +2812,40 @@ async function handleAgentAvatarRequest(req: IncomingMessage, res: ServerRespons
   }
 }
 
+async function handleStatusRequest(req: IncomingMessage, res: ServerResponse) {
+  if (req.method !== "GET") {
+    res.statusCode = 405;
+    res.setHeader("Allow", "GET");
+    res.end("Method Not Allowed");
+    return;
+  }
+
+  const expectedToken = await getInboundToken();
+  if (!expectedToken || readAuthorizationToken(req) !== expectedToken) {
+    writeJson(res, 401, { error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const requestUrl = new URL(req.url || DEFAULT_STATUS_PATH, "http://127.0.0.1");
+    const result = await readCustomChatSessionStatus({
+      target: requestUrl.searchParams.get("target") || "",
+      sessionKey: requestUrl.searchParams.get("sessionKey")?.trim() || null,
+      runId: requestUrl.searchParams.get("runId")?.trim() || null,
+      agentId: requestUrl.searchParams.get("agentId")?.trim() || null,
+    });
+
+    writeJson(res, 200, {
+      ok: true,
+      ...result,
+    });
+  } catch (error) {
+    writeJson(res, 500, {
+      error: error instanceof Error ? error.message : "customchat status failed.",
+    });
+  }
+}
+
 /**
  * 处理 DELETE /customchat/session 请求 — 删除 Gateway 会话并清除路由绑定。
  * 同时尝试删除标准 5 段 key 和 6 段（含 group:）key。
@@ -2993,6 +3127,11 @@ export function registerCustomChatHttpRoutes(api: CustomChatHttpRouteApi) {
       path: DEFAULT_SESSION_PATH,
       auth: "plugin",
       handler: handleSessionRequest,
+    });
+    api.registerHttpRoute({
+      path: DEFAULT_STATUS_PATH,
+      auth: "plugin",
+      handler: handleStatusRequest,
     });
     api.registerHttpRoute({
       path: DEFAULT_ABORT_PATH,
