@@ -224,8 +224,8 @@ function formatSessionMeta(status: MessageSessionMeta | null | undefined) {
     );
   }
 
-  if (status.compactions != null) {
-    parts.push(`Compactions: ${status.compactions}`);
+  if (status.compactions != null && status.compactions > 0) {
+    parts.push(`cpt: ${status.compactions}`);
   }
 
   return parts;
