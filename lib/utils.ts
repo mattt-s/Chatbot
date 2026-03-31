@@ -317,6 +317,7 @@ export function messageToView(message: StoredMessage): MessageView {
     groupRoleId: message.groupRoleId ?? null,
     senderLabel: message.senderLabel ?? null,
     mentionedGroupRoleIds: message.mentionedGroupRoleIds ?? [],
+    sessionMeta: message.sessionMeta ?? null,
   };
 }
 
@@ -683,6 +684,7 @@ export function applyChatEventToMessages(
     senderLabel: event.senderLabel ?? null,
     mentionedGroupRoleIds: event.mentionedGroupRoleIds ?? [],
   };
+  const sessionMeta = event.sessionMeta ?? null;
 
   if (event.state === "delta") {
     if (assistantIndex >= 0) {
@@ -711,6 +713,7 @@ export function applyChatEventToMessages(
           groupMessageFields.mentionedGroupRoleIds.length > 0
             ? groupMessageFields.mentionedGroupRoleIds
             : (existing.mentionedGroupRoleIds ?? []),
+        sessionMeta: sessionMeta ?? existing.sessionMeta ?? null,
       };
     } else {
       nextMessages.push({
@@ -728,6 +731,7 @@ export function applyChatEventToMessages(
         eventSeq: event.seq,
         runtimeSteps,
         ...groupMessageFields,
+        sessionMeta,
       });
     }
   } else if (event.state === "final" || event.state === "aborted") {
@@ -765,6 +769,7 @@ export function applyChatEventToMessages(
           groupMessageFields.mentionedGroupRoleIds.length > 0
             ? groupMessageFields.mentionedGroupRoleIds
             : (nextMessages[assistantIndex].mentionedGroupRoleIds ?? []),
+        sessionMeta: sessionMeta ?? nextMessages[assistantIndex].sessionMeta ?? null,
       };
     } else {
       nextMessages.push({
@@ -782,6 +787,7 @@ export function applyChatEventToMessages(
         eventSeq: event.seq,
         runtimeSteps,
         ...groupMessageFields,
+        sessionMeta,
       });
     }
   } else if (event.state === "error") {
@@ -813,6 +819,7 @@ export function applyChatEventToMessages(
           groupMessageFields.mentionedGroupRoleIds.length > 0
             ? groupMessageFields.mentionedGroupRoleIds
             : (nextMessages[assistantIndex].mentionedGroupRoleIds ?? []),
+        sessionMeta: sessionMeta ?? nextMessages[assistantIndex].sessionMeta ?? null,
       };
     } else {
       nextMessages.push({
@@ -830,6 +837,7 @@ export function applyChatEventToMessages(
         eventSeq: event.seq,
         runtimeSteps,
         ...groupMessageFields,
+        sessionMeta,
       });
     }
   }

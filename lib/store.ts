@@ -22,6 +22,7 @@ import type {
   GroupTaskState,
   GroupRoleView,
   MessageView,
+  MessageSessionMeta,
   PanelKind,
   PanelView,
   SessionUser,
@@ -803,6 +804,7 @@ export async function appendUserMessage(
       usage: null,
       runtimeSteps: [],
       mentionedGroupRoleIds: input.mentionedGroupRoleIds ?? [],
+      sessionMeta: null,
     };
 
     draft.messages.push(message);
@@ -899,6 +901,7 @@ export async function upsertAssistantMessage(
     groupRoleId?: string;
     senderLabel?: string;
     mentionedGroupRoleIds?: string[];
+    sessionMeta?: MessageSessionMeta | null;
   },
 ) {
   log.input("upsertAssistantMessage", {
@@ -978,6 +981,9 @@ export async function upsertAssistantMessage(
       if (input.mentionedGroupRoleIds && input.mentionedGroupRoleIds.length > 0) {
         existing.mentionedGroupRoleIds = input.mentionedGroupRoleIds;
       }
+      if (input.sessionMeta !== undefined) {
+        existing.sessionMeta = input.sessionMeta;
+      }
       if (mergedAttachments.duplicateIncomingPaths.length > 0) {
         await deleteStoredFiles(mergedAttachments.duplicateIncomingPaths);
       }
@@ -1005,6 +1011,7 @@ export async function upsertAssistantMessage(
       groupRoleId: input.groupRoleId ?? null,
       senderLabel: input.senderLabel ?? null,
       mentionedGroupRoleIds: input.mentionedGroupRoleIds ?? [],
+      sessionMeta: input.sessionMeta ?? null,
     };
 
     draft.messages.push(message);
@@ -1121,6 +1128,35 @@ export async function upsertAssistantRuntimeSteps(
     message.runtimeSteps = Array.from(byId.values())
       .sort((left, right) => left.ts - right.ts)
       .slice(-200);
+    panel.updatedAt = nowIso();
+
+    return messageToView(message);
+  });
+}
+
+export async function setAssistantMessageSessionMeta(
+  panelId: string,
+  runId: string,
+  sessionMeta: MessageSessionMeta | null,
+) {
+  return mutateData((draft) => {
+    const panel = draft.panels.find((candidate) => candidate.id === panelId);
+    if (!panel) {
+      throw new Error("Panel not found.");
+    }
+
+    const message = draft.messages.find(
+      (candidate) =>
+        candidate.panelId === panelId &&
+        candidate.role === "assistant" &&
+        candidate.runId === runId,
+    );
+
+    if (!message) {
+      return null;
+    }
+
+    message.sessionMeta = sessionMeta;
     panel.updatedAt = nowIso();
 
     return messageToView(message);

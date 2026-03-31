@@ -34,6 +34,7 @@ async function persistPanelChatEvent(panelId: string, payload: ChatEventPayload)
     stopReason: payload.stopReason ?? undefined,
     usage: payload.usage ?? undefined,
     seq: payload.seq,
+    sessionMeta: payload.sessionMeta ?? undefined,
   }).catch(() => null);
 
   if (payload.runtimeSteps && payload.runtimeSteps.length > 0) {

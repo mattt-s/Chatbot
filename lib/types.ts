@@ -113,6 +113,8 @@ export interface StoredMessage {
   senderLabel?: string | null;
   /** 末尾 @ 了哪些角色（供前端右下角展示） */
   mentionedGroupRoleIds?: string[];
+  /** 终态后补写的 session 概览信息，用于气泡底部展示 */
+  sessionMeta?: MessageSessionMeta | null;
 }
 
 /** 面板类型：direct=一对一对话, group=群组 */
@@ -217,6 +219,16 @@ export interface MessageView {
   senderLabel?: string | null;
   /** 末尾 @ 了哪些角色 ID */
   mentionedGroupRoleIds?: string[];
+  /** 终态后补写的 session 概览信息 */
+  sessionMeta?: MessageSessionMeta | null;
+}
+
+export interface MessageSessionMeta {
+  model: string | null;
+  contextUsedTokens: number | null;
+  contextMaxTokens: number | null;
+  contextPercent: number | null;
+  compactions: number | null;
 }
 
 /** 前端视图：群组角色 */
@@ -233,22 +245,6 @@ export interface GroupRoleView {
   busyAgeMs?: number | null;
   runtimeSource?: "local" | "verified";
   runtimeNote?: string | null;
-}
-
-export interface SessionStatusView {
-  sessionKey: string | null;
-  model: string | null;
-  contextUsedTokens: number | null;
-  contextMaxTokens: number | null;
-  contextPercent: number | null;
-  compactions: number | null;
-  source: "runtime" | "gateway-fallback" | "unknown";
-}
-
-export interface PanelSessionStatusResponse {
-  panelId: string;
-  direct: SessionStatusView | null;
-  groupRoles?: Record<string, SessionStatusView | null>;
 }
 
 /** 前端视图：聊天面板 */
@@ -337,6 +333,8 @@ export interface ChatEventPayload {
   senderLabel?: string;
   /** 末尾 @ 了哪些角色 ID */
   mentionedGroupRoleIds?: string[];
+  /** 终态后补写的 session 概览信息 */
+  sessionMeta?: MessageSessionMeta | null;
 }
 
 /** 日志尾部读取的响应结构 */

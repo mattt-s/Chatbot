@@ -12,8 +12,7 @@ import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import type { AttachmentView, MessageView } from "@/lib/types";
-import type { SessionStatusView } from "@/lib/types";
+import type { AttachmentView, MessageSessionMeta, MessageView } from "@/lib/types";
 import { formatBytes } from "@/lib/utils";
 import { formatTimeLabel } from "./chat-helpers";
 import type { RuntimeStep } from "./runtime-helpers";
@@ -205,7 +204,7 @@ function compactTokenCount(value: number) {
   return `${kilo.toFixed(1).replace(/\.0$/, "")}k`;
 }
 
-function formatSessionMeta(status: SessionStatusView | null | undefined) {
+function formatSessionMeta(status: MessageSessionMeta | null | undefined) {
   if (!status) {
     return [];
   }
@@ -265,7 +264,6 @@ function MessageBubbleComponent({
   groupRoleAvatarUrl,
   groupRoleIndex,
   mentionedRoles,
-  sessionStatus,
 }: {
   message: MessageView;
   hideNoiseText?: boolean;
@@ -290,7 +288,6 @@ function MessageBubbleComponent({
   groupRoleIndex?: number;
   /** 群组消息：被 @mention 的角色列表 */
   mentionedRoles?: Array<{ label: string; emoji: string | null }>;
-  sessionStatus?: SessionStatusView | null;
 }) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -324,7 +321,7 @@ function MessageBubbleComponent({
           ? `${message.senderLabel}${effectiveGroupEmoji ? ` ${effectiveGroupEmoji}` : ""}`
           : effectiveGroupLabel)
       : "System";
-  const sessionMetaParts = formatSessionMeta(sessionStatus);
+  const sessionMetaParts = isAssistant ? formatSessionMeta(message.sessionMeta) : [];
 
   const groupAvatarContent = groupRoleAvatarUrl ? (
     <Image
@@ -510,7 +507,7 @@ function MessageBubbleComponent({
 
         </div>
 
-        {isGroupStart ? (
+        {isGroupEnd ? (
           <div
             className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-[var(--ink-soft)] ${
               isUser ? "justify-end text-right" : "justify-start text-left"

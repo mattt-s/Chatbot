@@ -7,7 +7,7 @@
 "use client";
 
 import { useMemo, RefObject } from "react";
-import type { AgentView, GroupRoleView, MessageView, SessionStatusView } from "@/lib/types";
+import type { AgentView, GroupRoleView, MessageView } from "@/lib/types";
 import { MessageBubble } from "./message-bubble";
 import {
   isBridgeDeliveryMessage,
@@ -44,8 +44,6 @@ interface MessageListProps {
   isGroupPanel?: boolean;
   /** 群组角色列表 */
   groupRoles?: GroupRoleView[];
-  directSessionStatus?: SessionStatusView | null;
-  groupRoleSessionStatuses?: Record<string, SessionStatusView | null>;
 }
 
 /**
@@ -78,8 +76,6 @@ export function MessageList({
   onCollapse,
   isGroupPanel,
   groupRoles,
-  directSessionStatus,
-  groupRoleSessionStatuses,
 }: MessageListProps) {
   const agentMap = useMemo(() => {
     const map = new Map<string, AgentView>();
@@ -189,13 +185,6 @@ export function MessageList({
                 groupRoleAvatarUrl={roleInfo?.agent?.avatarUrl}
                 groupRoleIndex={roleInfo?.index}
                 mentionedRoles={mentionedRoles}
-                sessionStatus={
-                  isGroupPanel
-                    ? (msg.role === "assistant" && msg.groupRoleId
-                        ? groupRoleSessionStatuses?.[msg.groupRoleId] ?? null
-                        : null)
-                    : (directSessionStatus ?? null)
-                }
               />
             );
           })

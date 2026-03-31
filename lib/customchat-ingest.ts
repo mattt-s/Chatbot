@@ -31,17 +31,21 @@ import {
   listGroupRoles,
   listPanelMessages,
   persistDownloadedBuffer,
+  setAssistantMessageSessionMeta,
   setGroupPanelTaskState,
   setPanelActiveRun,
   upsertAssistantMessage,
   upsertAssistantRuntimeSteps,
 } from "@/lib/store";
+import { inspectProviderSession } from "@/lib/customchat-provider";
+import { extractMessageSessionMeta } from "@/lib/session-status";
 import {
   attachmentToView,
   classifyAttachment,
   extractGroupRoleIdFromTarget,
   normalizeCustomChatTarget,
   sanitizeFilename,
+  toCustomChatGroupRoleTarget,
 } from "@/lib/utils";
 import type { ChatEventPayload, StoredAttachment, StoredRuntimeStep } from "@/lib/types";
 
@@ -240,11 +244,13 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
   let displayText = text;
   let leaderIssuedCompletion = false;
   let shouldSuppressBridgeNoiseText = false;
+  let senderAgentId: string | null = null;
 
   if (groupRoleId) {
     const groupRoles = await listGroupRoles(panel.id);
     const role = groupRoles.find((r) => r.id === groupRoleId);
     senderLabel = role?.title ?? null;
+    senderAgentId = role?.agentId ?? null;
     leaderIssuedCompletion =
       role?.isLeader === true &&
       parsed.state === "final" &&
@@ -315,6 +321,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
   }
 
   const canonicalRunId = stored.runId?.trim() || runId;
+  let sessionMeta = stored.sessionMeta ?? null;
 
   if (parsed.state === "delta") {
     await setPanelActiveRun(panel.id, canonicalRunId).catch(() => null);
@@ -326,6 +333,25 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
     parsed.state === "error"
   ) {
     await setPanelActiveRun(panel.id, null).catch(() => null);
+
+    const inspectionTarget = groupRoleId
+      ? toCustomChatGroupRoleTarget(panel.id, groupRoleId)
+      : `channel:${panel.id}`;
+    const inspectionAgentId = senderAgentId || panel.agentId;
+    const inspection = await inspectProviderSession({
+      panelId: panel.id,
+      agentId: inspectionAgentId,
+      target: inspectionTarget,
+      runId: canonicalRunId,
+    }).catch(() => null);
+
+    sessionMeta = extractMessageSessionMeta({
+      snapshot: inspection?.snapshot,
+    });
+
+    if (sessionMeta) {
+      await setAssistantMessageSessionMeta(panel.id, canonicalRunId, sessionMeta).catch(() => null);
+    }
   }
 
   if (groupRoleId && parsed.state === "final") {
@@ -356,6 +382,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
     groupRoleId: groupRoleId ?? undefined,
     senderLabel: senderLabel ?? undefined,
     mentionedGroupRoleIds,
+    sessionMeta,
   };
 
   publishCustomChatEvent(payload);
