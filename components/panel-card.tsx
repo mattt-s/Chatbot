@@ -373,7 +373,11 @@ export function PanelCard({
     return () => { source.close(); };
   }, [panel.id, panel.kind, panel.sessionKey, refreshPanelMeta]);
 
-  async function patchPanel(patch: { title?: string; agentId?: string }) {
+  async function patchPanel(patch: {
+    title?: string;
+    agentId?: string;
+    taskStateSelection?: "idle" | "in_progress" | "completed";
+  }) {
     const resp = await fetch(`/api/panels/${panel.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -435,7 +439,6 @@ export function PanelCard({
     if (panel.kind === "group") {
       onPanelReplaced({
         ...panel,
-        taskState: "in_progress",
         messages: [...messagesRef.current, optimisticMessage],
       });
     }
@@ -625,6 +628,7 @@ export function PanelCard({
         }}
         onAddGroupRole={isGroupPanel ? () => setCreateGroupRoleDialog({ open: true, panelId: panel.id }) : undefined}
         onManageGroupRoles={isGroupPanel ? () => setManageGroupRolesDialog({ open: true, panelId: panel.id, roles: groupRoles }) : undefined}
+        onSelectTaskState={isGroupPanel ? (selection) => { void patchPanel({ taskStateSelection: selection }); } : undefined}
       />
 
       <MessageList

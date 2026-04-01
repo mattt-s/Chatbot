@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getGroupTaskStateClassName, getGroupTaskStateLabel } from "@/lib/group-task";
-import type { AgentView, PanelView } from "@/lib/types";
+import type { AgentView, GroupTaskState, PanelView } from "@/lib/types";
 
 /**
  * PanelHeader 的 Props。
@@ -32,6 +32,8 @@ interface PanelHeaderProps {
   onAddGroupRole?: () => void;
   /** 群组专用：打开"角色管理"对话框 */
   onManageGroupRoles?: () => void;
+  /** 群组专用：手动切换群任务状态 */
+  onSelectTaskState?: (selection: GroupTaskState) => void;
 }
 
 /**
@@ -58,15 +60,21 @@ export function PanelHeader({
   onCollapse,
   onAddGroupRole,
   onManageGroupRoles,
+  onSelectTaskState,
 }: PanelHeaderProps) {
   const isGroup = panel.kind === "group";
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [taskStateMenuOpen, setTaskStateMenuOpen] = useState(false);
+  const taskStateMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
         setMenuOpen(false);
+      }
+      if (!taskStateMenuRef.current?.contains(event.target as Node)) {
+        setTaskStateMenuOpen(false);
       }
     }
 
@@ -123,11 +131,53 @@ export function PanelHeader({
             onBlur={onTitleBlur}
           />
           {isGroup ? (
-            <span
-              className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getGroupTaskStateClassName(panel.taskState)}`}
-            >
-              {getGroupTaskStateLabel(panel.taskState)}
-            </span>
+            <div ref={taskStateMenuRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setTaskStateMenuOpen((current) => !current);
+                  setMenuOpen(false);
+                }}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getGroupTaskStateClassName(panel.taskState)}`}
+                title="点击切换群任务状态"
+              >
+                <span>{getGroupTaskStateLabel(panel.taskState)}</span>
+              </button>
+
+              {taskStateMenuOpen ? (
+                <div
+                  className="absolute left-1/2 top-8 z-10 min-w-[140px] -translate-x-1/2 rounded-2xl border border-black/10 bg-white p-2 shadow-[0_20px_40px_rgba(15,23,36,0.12)]"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {[
+                    { value: "in_progress", label: "进行中" },
+                    { value: "completed", label: "已完成" },
+                    { value: "idle", label: "空闲" },
+                  ].map((option) => {
+                    const selected = panel.taskState === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setTaskStateMenuOpen(false);
+                          onSelectTaskState?.(option.value as GroupTaskState);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                          selected
+                            ? "bg-[var(--paper-2)] font-semibold text-[var(--ink)]"
+                            : "text-[var(--ink)] hover:bg-[var(--paper-2)]"
+                        }`}
+                      >
+                        <span>{option.label}</span>
+                        {selected ? <span className="text-[11px] text-[var(--ink-soft)]">当前</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           {currentAgent?.emoji ? (
             <span className="shrink-0 text-sm leading-none">{currentAgent.emoji}</span>
@@ -145,7 +195,7 @@ export function PanelHeader({
               }}
               aria-label="角色管理"
               title="角色管理"
-              className="inline-flex h-8 items-center justify-center rounded-full border border-black/10 px-3 text-xs font-medium text-[var(--ink)] transition hover:border-[var(--accent)]"
+              className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-full border border-black/10 px-2.5 text-[11px] font-medium text-[var(--ink)] transition hover:border-[var(--accent)] md:h-8 md:px-3 md:text-xs"
             >
               角色管理
             </button>
@@ -224,7 +274,7 @@ export function PanelHeader({
                         setMenuOpen(false);
                         onAddGroupRole?.();
                       }}
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm text-[var(--ink)] transition hover:bg-[var(--paper-2)]"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] text-[var(--ink)] transition hover:bg-[var(--paper-2)]"
                     >
                       <span>添加角色</span>
                     </button>

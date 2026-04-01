@@ -15,6 +15,7 @@ import { shouldHideBridgeDeliveryNoiseText } from "@/lib/bridge-delivery";
 import {
   normalizeGroupTaskState,
   messageMarksGroupTaskCompleted,
+  messageMarksGroupTaskInProgress,
   stripGroupTaskMarkers,
 } from "@/lib/group-task";
 import {
@@ -243,6 +244,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
   let mentionedGroupRoleIds: string[] | undefined;
   let displayText = text;
   let leaderIssuedCompletion = false;
+  let leaderIssuedInProgress = false;
   let shouldSuppressBridgeNoiseText = false;
   let senderAgentId: string | null = null;
 
@@ -255,6 +257,10 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
       role?.isLeader === true &&
       parsed.state === "final" &&
       messageMarksGroupTaskCompleted(text);
+    leaderIssuedInProgress =
+      role?.isLeader === true &&
+      parsed.state === "final" &&
+      messageMarksGroupTaskInProgress(text);
 
     if (text) {
       const mentions = parseTrailingMentions(text, groupRoles);
@@ -355,14 +361,13 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
   }
 
   if (groupRoleId && parsed.state === "final") {
-    const nextTaskState =
-      leaderIssuedCompletion
-        ? "completed"
-        : normalizeGroupTaskState(panel.taskState) === "completed"
-          ? null
-          : "in_progress";
+    const nextTaskState = leaderIssuedCompletion
+      ? "completed"
+      : leaderIssuedInProgress
+        ? "in_progress"
+        : null;
     if (nextTaskState) {
-      await setGroupPanelTaskState(panel.id, nextTaskState).catch(() => null);
+      await setGroupPanelTaskState(panel.id, nextTaskState, "leader").catch(() => null);
     }
   }
 

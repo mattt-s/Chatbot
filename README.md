@@ -44,33 +44,35 @@ npm run test:watch  # 监听模式
 - 群消息通过显式 `@角色` 或默认 leader 路由到目标角色
 - 角色忙碌时，新消息进入该角色自己的等待队列
 - 每个群组维护任务状态：`空闲 / 进行中 / 已完成`
-- 群任务完成状态由 leader 在回复中显式输出 `[TASK_COMPLETED]` 控制
+- 群任务状态由 leader 在回复中显式输出 `[TASK_IN_PROGRESS]` / `[TASK_COMPLETED]` 控制
+- 用户也可以在群聊头部手动切换状态，但这只是临时改当前值，leader 后续标记仍可继续覆盖
 - 群任务 3 分钟无新消息且仍未完成时，系统会自动提醒 leader 催办并总结
 
 ### 群组消息流程图
 
 ```mermaid
 flowchart TD
-    A["用户/角色发消息"] --> B["群状态切到 in_progress"]
-    B --> C["群路由解析 @"]
-    C --> D["定位目标角色"]
-    D --> E{"角色是否空闲?"}
-    E -->|是| F["直接 dispatch"]
-    F --> G["记录 busy(runId)"]
-    E -->|否| H["消息进入该角色等待队列"]
+    A["用户/角色发消息"] --> B["群路由解析 @"]
+    B --> C["定位目标角色"]
+    C --> D{"角色是否空闲?"}
+    D -->|是| E["直接 dispatch"]
+    E --> F["记录 busy(runId)"]
+    D -->|否| G["消息进入该角色等待队列"]
 
-    I["角色回流 final/error/aborted"] --> J{"runId 是否匹配当前 active run?"}
-    J -->|匹配| K["释放 busy, 切回 idle"]
-    K --> L{"leader 是否输出 [TASK_COMPLETED]?"}
-    L -->|是| M["群状态切到 completed"]
-    L -->|否| N["保持当前群状态"]
-    M --> O["刷该角色等待队列"]
+    H["角色回流 final/error/aborted"] --> I{"runId 是否匹配当前 active run?"}
+    I -->|匹配| J["释放 busy, 切回 idle"]
+    J --> K{"leader final 是否带状态标记?"}
+    K -->|[TASK_IN_PROGRESS]| L["群状态切到 in_progress"]
+    K -->|[TASK_COMPLETED]| M["群状态切到 completed"]
+    K -->|无标记| N["群状态保持不变"]
+    L --> O["刷该角色等待队列"]
+    M --> O
     N --> O
-    J -->|不匹配| P["忽略旧事件, 不释放执行权"]
+    I -->|不匹配| P["忽略旧事件, 不释放执行权"]
 
     Q["群里所有角色 idle 且任务仍 in_progress"] --> R{"距离最后一条群消息是否 >= 3 分钟?"}
     R -->|是| S["系统提醒 leader 催促其他成员汇报进度"]
-    S --> T["leader 汇总后继续分派, 或输出 [TASK_COMPLETED]"]
+    S --> T["leader 汇总后继续分派, 或输出 [TASK_IN_PROGRESS] / [TASK_COMPLETED]"]
 ```
 
 ### 群组超时恢复机制

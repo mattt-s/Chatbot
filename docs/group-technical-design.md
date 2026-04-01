@@ -30,20 +30,27 @@
 
 状态切换规则：
 
-1. 用户向群里发出新任务
-   - 群状态切到 `in_progress`
-2. 群角色正常回复
-   - 默认保持 `in_progress`
-3. 只有 leader 在回复末尾单独输出 `[TASK_COMPLETED]`
+1. 用户向群里发消息
+   - 只负责路由，不会自动改群状态
+2. 只有 leader 的终态回复（`event:chat state=final`）才会触发自动状态切换
+3. leader 回复末尾单独输出 `[TASK_IN_PROGRESS]`
+   - app 才会把群状态切到 `in_progress`
+4. leader 回复末尾单独输出 `[TASK_COMPLETED]`
    - app 才会把群状态切到 `completed`
+5. leader 回复没有状态标记
+   - 群状态保持不变
 
-这意味着“任务完成”由 leader 显式控制，而不是由系统根据 busy/idle 自动推断。
+这意味着群任务状态由 leader 显式控制，而不是由“用户一发消息”或 busy/idle 自动推断。
 
 leader 的首轮注入提示里会明确说明：
 
-- 任务未完成时，要继续催办和汇总
-- 任务真正完成时，必须输出 `[TASK_COMPLETED]`
-- 未完成时禁止输出完成标记
+- 任务已经正式开始推进，或判断接下来仍需继续协作时，输出 `[TASK_IN_PROGRESS]`
+- 任务真正完成时，输出 `[TASK_COMPLETED]`
+- 小问题、闲聊、补充说明不输出任何状态标记
+- 同一条回复里不能同时输出两个标记
+
+此外，用户也可以在群聊头部手动把群状态切到 `idle / in_progress / completed`。
+这个手动操作只修改“当前状态值”，不会屏蔽 leader 的后续控制；leader 之后再次输出状态标记时，仍然会继续覆盖群状态。
 
 ## Busy / Idle State
 
@@ -108,6 +115,7 @@ app 会自动向 leader 发一条内部提醒，要求它：
 - 催促其他成员汇报任务/进度
 - 基于已收到的进度给出阶段总结
 - 决定是否继续分派下一步
+- 如果任务仍在推进，输出 `[TASK_IN_PROGRESS]`
 - 只有在任务真正完成时输出 `[TASK_COMPLETED]`
 
 实现上直接复用现有 watchdog 定时器，不单独起新的轮询器。这是当前最低成本方案。
@@ -140,5 +148,5 @@ flowchart TD
 
     U["群任务仍为 in_progress 且全员 idle"] --> V{"距最后一条群消息是否 >= 3m?"}
     V -->|是| W["系统内部提醒 leader 催办成员并做阶段总结"]
-    W --> X["leader 输出 [TASK_COMPLETED] 前, 任务保持进行中"]
+    W --> X["leader 输出 [TASK_IN_PROGRESS] 或 [TASK_COMPLETED]"]
 ```

@@ -17,7 +17,6 @@ import {
   appendUserMessage,
   listGroupRoles,
   persistUploadedFile,
-  setGroupPanelTaskState,
 } from "@/lib/store";
 import type { MessageView, SessionUser, StoredPanel } from "@/lib/types";
 import { sanitizeFilename } from "@/lib/utils";
@@ -92,7 +91,6 @@ export async function submitGroupMessage(
     attachments,
     mentionedGroupRoleIds: mentionedRoles.map((role) => role.id),
   });
-  await setGroupPanelTaskState(input.panel.id, "in_progress").catch(() => null);
 
   // 路由消息
   try {

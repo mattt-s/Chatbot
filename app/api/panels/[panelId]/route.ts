@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { deleteProviderSession } from "@/lib/customchat-provider";
+import { normalizeGroupTaskState } from "@/lib/group-task";
 import { toCustomChatGroupRoleTarget } from "@/lib/utils";
 import {
   deletePanel,
@@ -24,6 +25,7 @@ const patchSchema = z.object({
   agentId: z.string().min(1).optional(),
   userRoleName: z.string().max(40).optional(),
   assistantRoleName: z.string().max(40).optional(),
+  taskStateSelection: z.enum(["idle", "in_progress", "completed"]).optional(),
 });
 
 type RouteContext = {
@@ -80,7 +82,22 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   try {
-    return NextResponse.json(await updatePanel(user.id, panelId, parsed.data));
+    if (typeof parsed.data.taskStateSelection === "string") {
+      const panel = await getPanelRecordForUser(user.id, panelId);
+      if ((panel.kind ?? "direct") !== "group") {
+        return NextResponse.json({ error: "仅群组支持修改任务状态。" }, { status: 400 });
+      }
+    }
+
+    return NextResponse.json(
+      await updatePanel(user.id, panelId, {
+        ...parsed.data,
+        taskStateSelection:
+          typeof parsed.data.taskStateSelection === "string"
+            ? normalizeGroupTaskState(parsed.data.taskStateSelection)
+            : undefined,
+      }),
+    );
   } catch (error) {
     return NextResponse.json(
       {

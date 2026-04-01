@@ -5,7 +5,10 @@
  * 提供纯函数：从文本末尾提取 @mention、剥离 @mention 行得到正文、
  * 以及构造发送给角色的消息（含群组上下文注入）。
  */
-import { GROUP_TASK_COMPLETION_MARKER } from "@/lib/group-task";
+import {
+  GROUP_TASK_COMPLETION_MARKER,
+  GROUP_TASK_IN_PROGRESS_MARKER,
+} from "@/lib/group-task";
 import type { StoredGroupRole } from "@/lib/types";
 
 /**
@@ -189,8 +192,10 @@ export function buildDispatchMessage(params: {
         `2. 如果需要某个成员处理，在你的回复末尾 @该成员。`,
         `3. 如果消息是某个成员的任务完成汇报，理解内容后决定下一步行动。`,
         `4. 如果任务尚未完成，你要主动催促相关成员汇报进度，并给出阶段总结。`,
-        `5. 只有当整个群任务确实完成时，才在回复末尾另起一行输出 ${GROUP_TASK_COMPLETION_MARKER}。`,
-        `6. 如果任务还没完成，绝对不要输出完成标记。`,
+        `5. 当群任务已经正式开始推进，或你判断接下来还需要继续协作推进时，在回复末尾另起一行输出 ${GROUP_TASK_IN_PROGRESS_MARKER}。`,
+        `6. 只有当整个群任务确实完成时，才在回复末尾另起一行输出 ${GROUP_TASK_COMPLETION_MARKER}。`,
+        `7. 同一条回复里绝对不要同时输出 ${GROUP_TASK_IN_PROGRESS_MARKER} 和 ${GROUP_TASK_COMPLETION_MARKER}。`,
+        `8. 如果你只是回答一个小问题、闲聊、补充说明，且不代表群任务进入或继续推进，就不要输出任何状态标记。`,
       );
     }
 

@@ -623,6 +623,7 @@ export async function updatePanel(
     agentId?: string;
     userRoleName?: string;
     assistantRoleName?: string;
+    taskStateSelection?: GroupTaskState;
   },
 ) {
   return mutateData((draft) => {
@@ -648,6 +649,11 @@ export async function updatePanel(
       panel.activeRunId = null;
       panel.blockedRunIds = [];
       draft.messages = draft.messages.filter((message) => message.panelId !== panel.id);
+    }
+
+    if ((panel.kind ?? "direct") === "group" && typeof input.taskStateSelection === "string") {
+      const normalized = normalizeGroupTaskState(input.taskStateSelection);
+      panel.taskState = normalized;
     }
 
     panel.updatedAt = updatedAt;
@@ -1405,6 +1411,7 @@ export async function listPanelMessages(panelId: string): Promise<MessageView[]>
 export async function setGroupPanelTaskState(
   panelId: string,
   taskState: GroupTaskState,
+  _source: "leader" | "manual" = "leader",
 ): Promise<PanelView> {
   return mutateData((draft) => {
     const panel = draft.panels.find((candidate) => candidate.id === panelId);
@@ -1412,7 +1419,8 @@ export async function setGroupPanelTaskState(
       throw new Error("Group panel not found.");
     }
 
-    panel.taskState = normalizeGroupTaskState(taskState);
+    const normalized = normalizeGroupTaskState(taskState);
+    panel.taskState = normalized;
     panel.updatedAt = nowIso();
 
     return panelToView(
