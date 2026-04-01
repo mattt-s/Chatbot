@@ -122,7 +122,8 @@ openclaw plugins list
   "channels": {
     "customchat": {
       "authToken": "change-me-customchat-token",
-      "bridgePort": 3001
+      "bridgePort": 3001,
+      "debug": false
     }
   }
 }
@@ -134,11 +135,14 @@ openclaw plugins list
   customchat 的统一鉴权 token，同时用于 app 调插件 ingress 和插件连接 app bridge。
 - `bridgePort`
   插件回连 app bridge 时使用的端口。默认 `3001`，只有你显式改了 app 侧 bridge 端口时才需要一起改。
+- `debug`
+  是否开启插件 debug 日志。
 
 #### 哪些是必须的
 
 - `authToken`：必须
 - `bridgePort`：可选，默认 `3001`
+- `debug`：可选，默认关闭
 
 如果缺少 `authToken`，插件无法正常接 ingress 或回推消息。
 
@@ -198,7 +202,7 @@ Docker 更适合下面这些情况：
 - `APP_SESSION_SECRET`
 - `APP_ADMIN_EMAIL`
 - `APP_ADMIN_PASSWORD`
-- `CUSTOMCHAT_PROVIDER_BASE_URL`
+- `CUSTOMCHAT_PROVIDER_BASE_URL`（可缺省，默认 `http://127.0.0.1:18789`）
 - `CUSTOMCHAT_AUTH_TOKEN`
 - `CUSTOMCHAT_BRIDGE_PORT`（仅当你不用默认 `3001` 时）
 
@@ -208,6 +212,7 @@ Docker 更适合下面这些情况：
 - `CUSTOMCHAT_PROVIDER_BASE_URL` 默认就是 `http://127.0.0.1:18789`
 - `CUSTOMCHAT_AUTH_TOKEN` 要与 `openclaw.json` 保持一致
 - 如果你改了 `CUSTOMCHAT_BRIDGE_PORT`，要把 `openclaw.json` 里的 `channels.customchat.bridgePort` 改成相同值
+- 如果你想看插件详细日志，直接把 `openclaw.json` 里的 `channels.customchat.debug` 设为 `true`
 
 ### 3. 启动命令
 

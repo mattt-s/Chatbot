@@ -257,8 +257,6 @@ flowchart TD
 1. app Docker 环境变量
 2. OpenClaw `~/.openclaw/openclaw.json`
 
-`systemd` 环境变量现在只剩调试场景可选，不再是常规部署必需项。
-
 ### 哪些值必须保持一致
 
 以下值是成对使用的，必须一致：
@@ -279,7 +277,7 @@ app 容器使用这些环境变量。推荐直接写在项目根目录的 `.env`
 | `APP_SESSION_SECRET` | 是 | `replace-with-a-long-random-secret` | 登录态 JWT 签名密钥 |
 | `APP_ADMIN_EMAIL` | 是 | `admin@example.com` | 初始管理员邮箱 |
 | `APP_ADMIN_PASSWORD` | 是 | `ChangeMe123!` | 初始管理员密码 |
-| `CUSTOMCHAT_PROVIDER_BASE_URL` | 是 | `http://127.0.0.1:18789` | app 访问 OpenClaw 插件 ingress 的地址 |
+| `CUSTOMCHAT_PROVIDER_BASE_URL` | 否 | `http://127.0.0.1:18789` | app 访问 OpenClaw 插件 ingress 的地址；同机默认部署通常不用改 |
 | `CUSTOMCHAT_AUTH_TOKEN` | 是 | `change-me-customchat-token` | customchat 统一鉴权 token，同时用于 app -> 插件 HTTP 和 插件 -> app bridge |
 
 ### 推荐变量
@@ -327,7 +325,8 @@ OpenClaw 的 channel 主配置写在：
   "channels": {
     "customchat": {
       "authToken": "change-me-customchat-token",
-      "bridgePort": 3001
+      "bridgePort": 3001,
+      "debug": false
     }
   }
 }
@@ -339,6 +338,7 @@ OpenClaw 的 channel 主配置写在：
 |---|---|---|
 | `channels.customchat.authToken` | 是 | customchat 统一鉴权 token；app 侧 `CUSTOMCHAT_AUTH_TOKEN` 必须与之保持一致 |
 | `channels.customchat.bridgePort` | 否 | OpenClaw 插件回连 app bridge 的端口；默认 `3001` |
+| `channels.customchat.debug` | 否 | 是否开启插件 debug 日志 |
 
 ### 优先级说明
 
@@ -353,45 +353,7 @@ OpenClaw 的 channel 主配置写在：
 - 把 `authToken` 固定写在 `openclaw.json`
 - 只有 bridge 端口冲突时，才同时改 `.env` 里的 `CUSTOMCHAT_BRIDGE_PORT` 和 `openclaw.json` 里的 `channels.customchat.bridgePort`
 
-## 三、OpenClaw systemd 环境变量
-
-OpenClaw 宿主机需要给 `openclaw-gateway` 进程补一组环境变量。  
-推荐写到：
-
-`~/.config/systemd/user/openclaw-gateway.service.d/customchat.conf`
-
-### 现在是否还有必需变量
-
-当前实现里，插件需要的核心配置都可以直接从 `~/.openclaw/openclaw.json` 读取。
-
-所以：
-
-- `CUSTOMCHAT_AUTH_TOKEN` 不再是必须写进 systemd 环境变量的项目
-- `OPENCLAW_GATEWAY_HTTP_URL` 当前代码已经不再使用，不需要配置
-
-### 可选变量
-
-| 变量 | 是否必须 | 示例 | 作用 |
-|---|---|---|---|
-| `CUSTOMCHAT_DEBUG` | 否 | `true` | 开启插件 debug 日志 |
-
-### 推荐 `customchat.conf`
-
-```ini
-[Service]
-Environment=CUSTOMCHAT_DEBUG=true
-```
-
-如果你不需要插件 debug 日志，这个 drop-in 甚至可以完全不写。
-
-修改后执行：
-
-```bash
-systemctl --user daemon-reload
-systemctl --user restart openclaw-gateway
-```
-
-## 四、哪些变量在哪里生效
+## 三、哪些变量在哪里生效
 
 这一段最容易混：
 
@@ -404,7 +366,8 @@ systemctl --user restart openclaw-gateway
 
 用途：
 
-- 用户在页面里发消息时，app 调 OpenClaw 插件 ingress
+- `CUSTOMCHAT_PROVIDER_BASE_URL` 决定 app 去哪里访问 OpenClaw 插件 HTTP 接口
+- `CUSTOMCHAT_AUTH_TOKEN` 用作 app -> 插件 HTTP Bearer 鉴权
 
 ### OpenClaw -> app
 
@@ -412,11 +375,13 @@ systemctl --user restart openclaw-gateway
 
 - `channels.customchat.authToken`
 - `channels.customchat.bridgePort`
+- `channels.customchat.debug`
 
 用途：
 
 - `authToken` 同时用于 app -> 插件 ingress 鉴权 和 插件 -> app bridge 鉴权
 - `bridgePort` 用于插件 -> app bridge 回连
+- `debug` 控制插件是否输出 debug 日志
 
 ### app bridge WebSocket
 
@@ -436,7 +401,7 @@ bridge host 和 path 现在是固定约定：
 ws://127.0.0.1:3001/api/customchat/socket
 ```
 
-## 五、Docker 启动
+## 四、Docker 启动
 
 当前 Compose 已经按“同机宿主机 + host 网络”写好了：
 
@@ -454,7 +419,7 @@ docker compose up --build -d
 docker compose logs -f web
 ```
 
-## 六、OpenClaw 插件安装
+## 五、OpenClaw 插件安装
 
 在 OpenClaw 宿主机执行：
 
@@ -475,7 +440,7 @@ openclaw plugins list
 /home/user/program/ChatBot/plugins/customchat
 ```
 
-## 七、部署后自检
+## 六、部署后自检
 
 ### 检查 app
 
@@ -526,11 +491,11 @@ curl -b /tmp/chatbot-cookies.txt http://127.0.0.1:3000/api/agents
 - 返回真实 agent，而不是只剩 `main`
 - `avatarUrl` 形如 `/api/agents/<agentId>/avatar`
 
-## 八、问题排查
+## 七、问题排查
 
 > 🔍 完整的问题排查 SOP（登录、消息、流式推送、附件、中止推理等 10 类故障场景的排查步骤、调试日志开关配置）见 [docs/troubleshooting.md](docs/troubleshooting.md)。
 
-## 九、常见问题
+## 八、常见问题
 
 ### 1. 页面里只看到 `main`
 
@@ -559,12 +524,28 @@ curl -b /tmp/chatbot-cookies.txt http://127.0.0.1:3000/api/agents
 
 这样虽然 `bridgePort` 不可避免地分成两处，但职责仍然清楚：app 只读 `.env`，插件只读 `openclaw.json`。
 
-### 4. 为什么 app 是 `host` 网络
+### 4. 调试日志该配在哪里
+
+推荐直接写到 `~/.openclaw/openclaw.json`：
+
+```json
+{
+  "channels": {
+    "customchat": {
+      "debug": true
+    }
+  }
+}
+```
+
+这样就不需要再额外维护一份 `systemd` 环境变量配置。
+
+### 5. 为什么 app 是 `host` 网络
 
 因为 Gateway 限制在 `127.0.0.1`，容器如果用 bridge 网络，宿主机看到的来源不会是 `127.0.0.1`。  
 `network_mode: host` 能保证 app 容器访问 `127.0.0.1:18789` 时，对 OpenClaw 来说就是真正的本机回环访问。
 
-## 十、当前实现备注
+## 九、当前实现备注
 
 - `plugin -> Gateway`：常驻 WS
 - `plugin -> app`：常驻 WS
@@ -575,7 +556,7 @@ curl -b /tmp/chatbot-cookies.txt http://127.0.0.1:3000/api/agents
   - `chat.history` 回补
   - 重连后活跃 run 恢复
 
-## 十一、工具执行信息（Tool Events）
+## 十、工具执行信息（Tool Events）
 
 ### 1. 从 Gateway 获取工具信息
 
