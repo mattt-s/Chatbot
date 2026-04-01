@@ -452,6 +452,7 @@ export async function abortCustomChatSession(
   const agentId = input.agentId?.trim() || remembered?.agentId || "main";
   const sessionKey =
     normalizeSessionKeyCandidate(input.sessionKey) ||
+    normalizeSessionKeyCandidate(runtimeTracked?.sessionKey) ||
     normalizeSessionKeyCandidate(remembered?.sessionKey) ||
     normalizeSessionKeyCandidate(remembered?.expectedSessionKey) ||
     buildCanonicalSessionKey(agentId, target);
@@ -461,17 +462,26 @@ export async function abortCustomChatSession(
     remembered?.runIds.at(-1) ||
     null;
 
-  abortGatewaySession(sessionKey).catch((error) => {
-    console.error(`[customchat] background chat.abort failed for ${sessionKey}:`, error);
-  });
+  await abortGatewaySession(sessionKey);
+
+  let verified = false;
+  if (runId) {
+    try {
+      await waitForGatewayRun(runId, 3_000);
+      verified = true;
+    } catch {
+      verified = false;
+    }
+  }
 
   return {
     ok: true,
     target,
     sessionKey,
     runId,
-    queued: true,
+    queued: !verified,
     runtimeTracked: Boolean(runtimeTracked),
+    verified,
   };
 }
 let gatewayRecoveryInFlight = false;

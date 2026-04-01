@@ -86,16 +86,11 @@ export function ManageGroupRolesDialog({
               暂无角色，点击「添加角色」新增。
             </div>
           ) : (
-            enabledRoles.map((role, index) => (
+            enabledRoles.map((role) => (
               <div
                 key={role.id}
                 className="flex items-center gap-3 rounded-2xl border border-black/8 bg-white px-4 py-3"
               >
-                {/* 角色头像 */}
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/8 bg-white text-sm font-semibold text-[var(--ink-soft)]">
-                  {role.emoji || String(index + 1)}
-                </div>
-
                 {/* 角色信息 */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

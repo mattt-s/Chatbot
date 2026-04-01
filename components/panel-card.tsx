@@ -560,12 +560,28 @@ export function PanelCard({
   }
 
   async function handleAbortGroupRole(panelId: string, roleId: string) {
+    const markRoleAborting = (roles: GroupRoleView[]) =>
+      roles.map((role) =>
+        role.id === roleId
+          ? {
+              ...role,
+              runtimeStatus: "aborting" as const,
+            }
+          : role,
+      );
+
+    setGroupRoles((current) => markRoleAborting(current));
+    setManageGroupRolesDialog((prev) =>
+      prev ? { ...prev, roles: markRoleAborting(prev.roles) } : prev,
+    );
+
     const resp = await fetch(`/api/panels/${panelId}/group-roles/${roleId}/abort`, {
       method: "POST",
     });
     const payload = (await resp.json().catch(() => null)) as { error?: string } | null;
     if (!resp.ok && resp.status !== 202) {
       setErrorMessage(payload?.error ?? "终止角色推理失败。");
+      await refreshGroupRoles();
       return;
     }
 

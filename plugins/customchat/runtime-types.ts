@@ -73,6 +73,7 @@ export type CustomChatAbortResult = {
   runId: string | null;
   queued: boolean;
   runtimeTracked: boolean;
+  verified?: boolean;
 };
 
 export type CustomChatRuntimeStatus = {
