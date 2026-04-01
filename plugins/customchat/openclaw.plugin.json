@@ -32,16 +32,10 @@
               "type": "integer",
               "minimum": 1
             }
-          },
-          "required": [
-            "authToken"
-          ]
+          }
         }
       }
-    },
-    "required": [
-      "authToken"
-    ]
+    }
   },
   "uiHints": {
     "authToken": {
