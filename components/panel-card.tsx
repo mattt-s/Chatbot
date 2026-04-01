@@ -403,7 +403,7 @@ export function PanelCard({
 
   async function handleSend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSending || activeRunIdRef.current) return;
+    if (isSending || (panel.kind !== "group" && activeRunIdRef.current)) return;
     const pendingText = draft;
     const pendingFiles = selectedFiles;
     const pendingMentionRoleIds = selectedMentionRoleIds;

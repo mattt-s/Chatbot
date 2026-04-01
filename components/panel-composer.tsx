@@ -85,6 +85,9 @@ export function PanelComposer({
     ? mobileComposerExpanded || hasComposerContent
     : composerFocused || hasComposerContent;
   const composerCompactMobile = isMobileInputMode && !composerExpanded;
+  const sendBlockedByRun = !isGroupPanel && isRunActive;
+  const sendDisabled = isSending || sendBlockedByRun;
+  const sendButtonLabel = isSending ? "发送中..." : sendBlockedByRun ? "推理中..." : "发送";
 
   // @ 自动补全
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -639,9 +642,9 @@ export function PanelComposer({
                 <button
                   type="submit"
                   className="ml-auto rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-[var(--paper)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 md:px-5 md:py-2.5 md:text-sm"
-                  disabled={isSending || isRunActive}
+                  disabled={sendDisabled}
                 >
-                  {isSending ? "发送中..." : isRunActive ? "推理中..." : "发送"}
+                  {sendButtonLabel}
                 </button>
               ) : null}
             </div>
@@ -690,9 +693,9 @@ export function PanelComposer({
               <button
                 type="submit"
                 className="rounded-full bg-[var(--ink)] px-4 py-1.5 text-xs font-semibold text-[var(--paper)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isSending || isRunActive}
+                disabled={sendDisabled}
               >
-                {isSending ? "发送中..." : isRunActive ? "推理中..." : "发送"}
+                {sendButtonLabel}
               </button>
             </div>
           </div>
