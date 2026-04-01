@@ -41,14 +41,17 @@ export function ManageGroupRolesDialog({
   onClose,
   onDeleteRole,
   onToggleLeader,
+  onAbortRole,
 }: {
   config: ManageGroupRolesDialogConfig | null;
   onClose: () => void;
   onDeleteRole: (panelId: string, roleId: string) => Promise<void> | void;
   onToggleLeader: (panelId: string, roleId: string, isLeader: boolean) => Promise<void> | void;
+  onAbortRole: (panelId: string, roleId: string) => Promise<void> | void;
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [abortingId, setAbortingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!config?.open) return;
@@ -141,6 +144,30 @@ export function ManageGroupRolesDialog({
 
                 {/* 操作按钮 */}
                 <div className="flex shrink-0 items-center gap-1.5">
+                  {(role.runtimeStatus === "busy" ||
+                    role.runtimeStatus === "checking" ||
+                    role.runtimeStatus === "aborting") ? (
+                    <button
+                      type="button"
+                      disabled={abortingId === role.id || role.runtimeStatus === "aborting"}
+                      onClick={async () => {
+                        setAbortingId(role.id);
+                        try {
+                          await onAbortRole(config.panelId, role.id);
+                        } finally {
+                          setAbortingId(null);
+                        }
+                      }}
+                      className="rounded-full border border-red-200 px-2.5 py-1 text-[10px] font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      {role.runtimeStatus === "aborting"
+                        ? "终止中..."
+                        : abortingId === role.id
+                          ? "..."
+                          : "终止推理"}
+                    </button>
+                  ) : null}
+
                   <button
                     type="button"
                     disabled={togglingId === role.id}

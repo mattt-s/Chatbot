@@ -189,7 +189,7 @@ export function PanelHeader({
               </div>
 
               <div className="mt-2 space-y-1">
-                {isRunActive ? (
+                {!isGroup && isRunActive ? (
                   <button
                     type="button"
                     onClick={() => {

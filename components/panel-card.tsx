@@ -556,6 +556,23 @@ export function PanelCard({
     }
   }
 
+  async function handleAbortGroupRole(panelId: string, roleId: string) {
+    const resp = await fetch(`/api/panels/${panelId}/group-roles/${roleId}/abort`, {
+      method: "POST",
+    });
+    const payload = (await resp.json().catch(() => null)) as { error?: string } | null;
+    if (!resp.ok && resp.status !== 202) {
+      setErrorMessage(payload?.error ?? "终止角色推理失败。");
+      return;
+    }
+
+    setErrorMessage(null);
+    const freshRoles = await refreshGroupRoles();
+    if (freshRoles) {
+      setManageGroupRolesDialog((prev) => (prev ? { ...prev, roles: freshRoles } : null));
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PanelHeader
@@ -648,6 +665,7 @@ export function PanelCard({
             onClose={() => setManageGroupRolesDialog(null)}
             onDeleteRole={handleDeleteGroupRole}
             onToggleLeader={handleToggleLeader}
+            onAbortRole={handleAbortGroupRole}
           />
         </>
       ) : null}

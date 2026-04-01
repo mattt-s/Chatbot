@@ -326,6 +326,57 @@ async function abortBusyRole(panelId: string, groupRoleId: string, state: BusyRo
   }
 }
 
+export async function abortGroupRoleRun(panelId: string, groupRoleId: string) {
+  const key = `${panelId}:${groupRoleId}`;
+  const current = busyRoles.get(key);
+  if (!current) {
+    return {
+      status: "idle" as const,
+      runId: null,
+    };
+  }
+
+  if (current.abortRequestedAt) {
+    return {
+      status: "aborting" as const,
+      runId: current.runId,
+    };
+  }
+
+  current.abortRequestedAt = Date.now();
+
+  try {
+    const target = toCustomChatGroupRoleTarget(panelId, groupRoleId);
+    const providerAbort = await abortProviderRun({
+      panelId,
+      agentId: current.agentId,
+      runId: current.runId,
+      target,
+    });
+
+    if (providerAbort?.verified === false) {
+      return {
+        status: "aborting" as const,
+        runId: current.runId,
+      };
+    }
+
+    const groupRoles = await listGroupRoles(panelId);
+    await releaseRoleAndFlushQueue(panelId, groupRoleId, current.runId, groupRoles);
+
+    return {
+      status: "aborted" as const,
+      runId: current.runId,
+    };
+  } catch (error) {
+    const latest = busyRoles.get(key);
+    if (latest && latest.runId === current.runId) {
+      latest.abortRequestedAt = null;
+    }
+    throw error;
+  }
+}
+
 async function runBusyRoleWatchdog() {
   const settings = readEffectiveAppSettingsSync();
   const now = Date.now();
