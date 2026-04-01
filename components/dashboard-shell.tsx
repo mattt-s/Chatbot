@@ -301,7 +301,7 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
             </button>
           </div>
 
-          <div className="touch-scroll mt-4 flex-1 space-y-2 overflow-y-auto pr-1">
+          <div className="touch-scroll mt-4 space-y-2 overflow-y-auto pr-1 lg:flex-1">
             {panels.map((panel) => (
               <PanelSidebarItem
                 key={panel.id}
