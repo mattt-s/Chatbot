@@ -136,6 +136,8 @@ export interface StoredPanel {
   kind?: PanelKind;
   /** 群任务状态，仅群组使用 */
   taskState?: GroupTaskState;
+  /** 群任务状态最近一次变化时间，仅群组使用 */
+  taskStateChangedAt?: string;
   /** 用户角色显示名 */
   userRoleName?: string;
   /** 助手角色显示名 */

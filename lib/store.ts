@@ -406,6 +406,7 @@ function createPanelRecord(
     sessionKey: buildSessionKey(agentId, id),
     kind,
     taskState: kind === "group" ? "idle" : undefined,
+    taskStateChangedAt: kind === "group" ? createdAt : undefined,
     userRoleName: DEFAULT_USER_ROLE_NAME,
     assistantRoleName: DEFAULT_ASSISTANT_ROLE_NAME,
     activeRunId: null,
@@ -654,6 +655,7 @@ export async function updatePanel(
     if ((panel.kind ?? "direct") === "group" && typeof input.taskStateSelection === "string") {
       const normalized = normalizeGroupTaskState(input.taskStateSelection);
       panel.taskState = normalized;
+      panel.taskStateChangedAt = updatedAt;
     }
 
     panel.updatedAt = updatedAt;
@@ -1420,8 +1422,10 @@ export async function setGroupPanelTaskState(
     }
 
     const normalized = normalizeGroupTaskState(taskState);
+    const updatedAt = nowIso();
     panel.taskState = normalized;
-    panel.updatedAt = nowIso();
+    panel.taskStateChangedAt = updatedAt;
+    panel.updatedAt = updatedAt;
 
     return panelToView(
       panel,

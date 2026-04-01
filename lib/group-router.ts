@@ -86,7 +86,8 @@ const initializedRoles = new Set<string>();
 const runToRoleMap = new Map<string, { panelId: string; groupRoleId: string }>();
 const groupReminderState = new Map<string, { lastReminderAt: number }>();
 
-let watchdogTimer: NodeJS.Timeout | null = null;
+let busyRoleWatchdogTimer: NodeJS.Timeout | null = null;
+let taskReminderWatchdogTimer: NodeJS.Timeout | null = null;
 
 // ────────────────────────────────────────────
 // Safety limits
@@ -150,7 +151,7 @@ function markRoleBusy(panelId: string, groupRoleId: string, runId: string, agent
     runId,
     agentId,
   });
-  ensureWatchdogStarted();
+  ensureBusyRoleWatchdogStarted();
 }
 
 export function markRoleIdle(panelId: string, groupRoleId: string, runId?: string) {
@@ -201,27 +202,45 @@ function markInitialized(panelId: string, groupRoleId: string) {
   initializedRoles.add(`${panelId}:${groupRoleId}`);
 }
 
-function ensureWatchdogStarted() {
-  if (watchdogTimer) {
+function ensureBusyRoleWatchdogStarted() {
+  if (busyRoleWatchdogTimer) {
     return;
   }
 
   const intervalMs = readEffectiveAppSettingsSync().groupRoleWatchdogIntervalMs;
-  watchdogTimer = setInterval(() => {
+  busyRoleWatchdogTimer = setInterval(() => {
     void runBusyRoleWatchdog();
   }, intervalMs);
-  watchdogTimer.unref?.();
+  busyRoleWatchdogTimer.unref?.();
+}
+
+export function ensureGroupTaskReminderWatchdogStarted() {
+  if (taskReminderWatchdogTimer) {
+    return;
+  }
+
+  const intervalMs = readEffectiveAppSettingsSync().groupRoleWatchdogIntervalMs;
+  taskReminderWatchdogTimer = setInterval(() => {
+    void runGroupTaskReminderWatchdog(Date.now());
+  }, intervalMs);
+  taskReminderWatchdogTimer.unref?.();
 }
 
 export function refreshBusyRoleWatchdog() {
-  if (watchdogTimer) {
-    clearInterval(watchdogTimer);
-    watchdogTimer = null;
+  if (busyRoleWatchdogTimer) {
+    clearInterval(busyRoleWatchdogTimer);
+    busyRoleWatchdogTimer = null;
   }
 
   if (busyRoles.size > 0) {
-    ensureWatchdogStarted();
+    ensureBusyRoleWatchdogStarted();
   }
+
+  if (taskReminderWatchdogTimer) {
+    clearInterval(taskReminderWatchdogTimer);
+    taskReminderWatchdogTimer = null;
+  }
+  ensureGroupTaskReminderWatchdogStarted();
 }
 
 async function recoverStaleRole(panelId: string, groupRoleId: string, runId: string) {
@@ -400,8 +419,6 @@ async function runBusyRoleWatchdog() {
       await inspectBusyRole(panelId, groupRoleId, state);
     }
   }));
-
-  await runGroupTaskReminderWatchdog(now);
 }
 
 export function getGroupRoleRuntimeStatuses(panelId: string) {
@@ -524,7 +541,9 @@ async function runGroupTaskReminderWatchdog(now: number) {
       const messages = await listPanelMessages(panel.id);
       const lastMessageTs = messages.length > 0
         ? new Date(messages[messages.length - 1].createdAt).getTime()
-        : new Date(panel.updatedAt).getTime();
+        : panel.taskStateChangedAt
+          ? new Date(panel.taskStateChangedAt).getTime()
+          : new Date(panel.updatedAt).getTime();
       const lastActivityTs = Math.max(lastMessageTs, lastReminder);
 
       if (now - lastActivityTs < GROUP_TASK_REMINDER_AFTER_MS) {
@@ -558,6 +577,12 @@ async function runGroupTaskReminderWatchdog(now: number) {
       });
 
       try {
+        log.debug("groupTaskReminder", {
+          panelId: panel.id,
+          leaderId: leader.id,
+          idleMs: String(now - lastActivityTs),
+          source: messages.length > 0 ? "last-message" : "task-state-changed-at",
+        });
         await dispatchToRole({
           panelId: panel.id,
           groupRoleId: leader.id,

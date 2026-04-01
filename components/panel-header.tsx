@@ -139,7 +139,7 @@ export function PanelHeader({
                   setTaskStateMenuOpen((current) => !current);
                   setMenuOpen(false);
                 }}
-                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getGroupTaskStateClassName(panel.taskState)}`}
+                className={`inline-flex h-6 items-center justify-center whitespace-nowrap rounded-full border px-2 text-[9px] font-medium md:h-7 md:px-2.5 md:text-[10px] ${getGroupTaskStateClassName(panel.taskState)}`}
                 title="点击切换群任务状态"
               >
                 <span>{getGroupTaskStateLabel(panel.taskState)}</span>
@@ -185,7 +185,7 @@ export function PanelHeader({
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusDotClass}`} />
         </div>
 
-        <div className="absolute right-0 flex items-center gap-2">
+        <div className="absolute right-0 flex items-center gap-1.5 md:gap-2">
           {isGroup ? (
             <button
               type="button"
@@ -195,7 +195,7 @@ export function PanelHeader({
               }}
               aria-label="角色管理"
               title="角色管理"
-              className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-full border border-black/10 px-2.5 text-[11px] font-medium text-[var(--ink)] transition hover:border-[var(--accent)] md:h-8 md:px-3 md:text-xs"
+              className="inline-flex h-6 items-center justify-center whitespace-nowrap rounded-full border border-black/10 px-2 text-[9px] font-medium text-[var(--ink)] transition hover:border-[var(--accent)] md:h-7 md:px-2.5 md:text-[10px]"
             >
               角色管理
             </button>

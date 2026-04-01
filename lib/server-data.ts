@@ -7,6 +7,7 @@ import "server-only";
 
 import { getChannelView, loadAgentCatalog } from "@/lib/agents";
 import { ensureCustomChatBridgeServer } from "@/lib/customchat-bridge-server";
+import { ensureGroupTaskReminderWatchdogStarted } from "@/lib/group-router";
 import { ensureDefaultPanel, ensureSeededAdminUser } from "@/lib/store";
 import type { DashboardData, SessionUser } from "@/lib/types";
 
@@ -22,6 +23,7 @@ export async function loadDashboardData(user: SessionUser): Promise<DashboardDat
     ensureSeededAdminUser(),
     loadAgentCatalog(),
   ]);
+  ensureGroupTaskReminderWatchdogStarted();
   const fallbackAgentId = agents[0]?.id ?? "main";
   const panels = await ensureDefaultPanel(user.id, fallbackAgentId, {
     includeMessages: false,
