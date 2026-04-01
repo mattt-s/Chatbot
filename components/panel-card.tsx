@@ -515,7 +515,7 @@ export function PanelCard({
     void refreshGroupRoles();
     const timer = window.setInterval(() => {
       void refreshGroupRoles();
-    }, 10_000);
+    }, 2_000);
 
     return () => window.clearInterval(timer);
   }, [manageGroupRolesDialog?.open, panel.id, refreshGroupRoles]);
