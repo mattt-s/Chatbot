@@ -25,6 +25,8 @@ import { CreateGroupDialog } from "./create-group-dialog";
 import type { CreateGroupDialogConfig } from "./create-group-dialog";
 import { CreateRoleDialog } from "./create-role-dialog";
 import type { CreateRoleDialogConfig } from "./create-role-dialog";
+import { AppSettingsDialog } from "./app-settings-dialog";
+import type { AppSettingsDialogConfig } from "./app-settings-dialog";
 import { PanelCard } from "./panel-card";
 import { PanelSidebarItem } from "./panel-sidebar-item";
 
@@ -49,6 +51,7 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogConfig | null>(null);
   const [createRoleDialog, setCreateRoleDialog] = useState<CreateRoleDialogConfig | null>(null);
   const [createGroupDialog, setCreateGroupDialog] = useState<CreateGroupDialogConfig | null>(null);
+  const [settingsDialog, setSettingsDialog] = useState<AppSettingsDialogConfig | null>(null);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
   useEffect(() => {
@@ -347,11 +350,10 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
             <div className="mt-3 flex items-center gap-2">
               <button
                 type="button"
-                onClick={openCreatePanelDialog}
+                onClick={() => setSettingsDialog({ open: true })}
                 className="flex-1 rounded-full border border-black/10 px-3 py-2 text-sm font-medium text-[var(--ink)] transition hover:border-[var(--accent)]"
-                disabled={isCreating}
               >
-                新增
+                设置
               </button>
               <button
                 type="button"
@@ -419,6 +421,11 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
           }
         }}
         onCreate={createGroup}
+      />
+      <AppSettingsDialog
+        config={settingsDialog}
+        onClose={() => setSettingsDialog(null)}
+        onSaved={() => undefined}
       />
     </main>
   );

@@ -14,6 +14,7 @@ import "server-only";
 import crypto from "node:crypto";
 
 import { abortProviderRun, inspectProviderSession } from "@/lib/customchat-provider";
+import { readEffectiveAppSettingsSync } from "@/lib/app-settings";
 import { getEnv } from "@/lib/env";
 import { buildLeaderProgressReminder, GROUP_TASK_REMINDER_AFTER_MS } from "@/lib/group-task";
 import { createLogger } from "@/lib/logger";
@@ -205,11 +206,22 @@ function ensureWatchdogStarted() {
     return;
   }
 
-  const intervalMs = getEnv().groupRoleWatchdogIntervalMs;
+  const intervalMs = readEffectiveAppSettingsSync().groupRoleWatchdogIntervalMs;
   watchdogTimer = setInterval(() => {
     void runBusyRoleWatchdog();
   }, intervalMs);
   watchdogTimer.unref?.();
+}
+
+export function refreshBusyRoleWatchdog() {
+  if (watchdogTimer) {
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
+  }
+
+  if (busyRoles.size > 0) {
+    ensureWatchdogStarted();
+  }
 }
 
 async function recoverStaleRole(panelId: string, groupRoleId: string, runId: string) {
@@ -315,7 +327,7 @@ async function abortBusyRole(panelId: string, groupRoleId: string, state: BusyRo
 }
 
 async function runBusyRoleWatchdog() {
-  const env = getEnv();
+  const settings = readEffectiveAppSettingsSync();
   const now = Date.now();
   const entries = Array.from(busyRoles.entries());
   await Promise.all(entries.map(async ([key, state]) => {
@@ -325,14 +337,14 @@ async function runBusyRoleWatchdog() {
     }
 
     const ageMs = now - state.startedAt;
-    if (ageMs >= env.groupRoleBusyAbortAfterMs) {
+    if (ageMs >= settings.groupRoleBusyAbortAfterMs) {
       await abortBusyRole(panelId, groupRoleId, state);
       return;
     }
 
     if (
-      ageMs >= env.groupRoleBusyInspectAfterMs &&
-      (!state.lastInspectionAt || now - state.lastInspectionAt >= env.groupRoleWatchdogIntervalMs)
+      ageMs >= settings.groupRoleBusyInspectAfterMs &&
+      (!state.lastInspectionAt || now - state.lastInspectionAt >= settings.groupRoleWatchdogIntervalMs)
     ) {
       await inspectBusyRole(panelId, groupRoleId, state);
     }

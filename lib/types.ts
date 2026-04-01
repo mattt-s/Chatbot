@@ -167,6 +167,14 @@ export interface StoredGroupRole {
   updatedAt: string;
 }
 
+export interface StoredAppSettings {
+  appDebugEnabled?: boolean;
+  groupRoleWatchdogIntervalMs?: number;
+  groupRoleBusyInspectAfterMs?: number;
+  groupRoleBusyAbortAfterMs?: number;
+  updatedAt?: string;
+}
+
 /** 应用持久化数据的顶层结构（app-data.json） */
 export interface AppData {
   users: StoredUser[];
@@ -174,6 +182,7 @@ export interface AppData {
   messages: StoredMessage[];
   /** 群组角色列表 */
   groupRoles: StoredGroupRole[];
+  settings?: StoredAppSettings;
 }
 
 /** 会话中的用户信息（不含敏感字段） */
@@ -307,6 +316,13 @@ export interface DashboardData {
   panels: PanelView[];
   /** 频道状态 */
   channel: ChannelView;
+}
+
+export interface AppSettingsView {
+  appDebugEnabled: boolean;
+  groupRoleWatchdogIntervalMs: number;
+  groupRoleBusyInspectAfterMs: number;
+  groupRoleBusyAbortAfterMs: number;
 }
 
 /** SSE 聊天事件载荷，由 customchat-ingest 发布到前端 */

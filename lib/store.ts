@@ -18,6 +18,7 @@ import { normalizeGroupTaskState } from "@/lib/group-task";
 import { createLogger } from "@/lib/logger";
 import type {
   AppData,
+  AppSettingsView,
   AttachmentView,
   GroupTaskState,
   GroupRoleView,
@@ -28,6 +29,7 @@ import type {
   SessionUser,
   StoredAttachment,
   StoredGroupRole,
+  StoredAppSettings,
   StoredMessage,
   StoredPanel,
   StoredRuntimeStep,
@@ -52,6 +54,7 @@ const EMPTY_DATA: AppData = {
   panels: [],
   messages: [],
   groupRoles: [],
+  settings: {},
 };
 
 const DEFAULT_USER_ROLE_NAME = "我";
@@ -97,6 +100,7 @@ async function readData(): Promise<AppData> {
   const parsed = raw ? (JSON.parse(raw) as AppData) : EMPTY_DATA;
   // Backward compat: older data files may lack groupRoles
   parsed.groupRoles = parsed.groupRoles ?? [];
+  parsed.settings = parsed.settings ?? {};
   parsed.messages = (parsed.messages ?? []).map((message) => ({
     ...message,
     runtimeSteps: sanitizeRuntimeSteps(message.runtimeSteps ?? []),
@@ -116,6 +120,34 @@ async function writeData(data: AppData) {
     "utf8",
   );
   cachedData = structuredClone(data);
+}
+
+function normalizeStoredSettingsUpdate(
+  input: Partial<AppSettingsView>,
+  previous: StoredAppSettings | undefined,
+): StoredAppSettings {
+  return {
+    ...previous,
+    ...(typeof input.appDebugEnabled === "boolean"
+      ? { appDebugEnabled: input.appDebugEnabled }
+      : {}),
+    ...(typeof input.groupRoleWatchdogIntervalMs === "number" &&
+    Number.isFinite(input.groupRoleWatchdogIntervalMs) &&
+    input.groupRoleWatchdogIntervalMs > 0
+      ? { groupRoleWatchdogIntervalMs: Math.trunc(input.groupRoleWatchdogIntervalMs) }
+      : {}),
+    ...(typeof input.groupRoleBusyInspectAfterMs === "number" &&
+    Number.isFinite(input.groupRoleBusyInspectAfterMs) &&
+    input.groupRoleBusyInspectAfterMs > 0
+      ? { groupRoleBusyInspectAfterMs: Math.trunc(input.groupRoleBusyInspectAfterMs) }
+      : {}),
+    ...(typeof input.groupRoleBusyAbortAfterMs === "number" &&
+    Number.isFinite(input.groupRoleBusyAbortAfterMs) &&
+    input.groupRoleBusyAbortAfterMs > 0
+      ? { groupRoleBusyAbortAfterMs: Math.trunc(input.groupRoleBusyAbortAfterMs) }
+      : {}),
+    updatedAt: nowIso(),
+  };
 }
 
 async function deleteStoredFiles(paths: Array<string | null | undefined>) {
@@ -466,6 +498,18 @@ export async function findUserByEmail(email: string) {
 export async function findUserById(userId: string) {
   const data = await readData();
   return data.users.find((user) => user.id === userId);
+}
+
+export async function getStoredAppSettings() {
+  const data = await readData();
+  return structuredClone(data.settings ?? {});
+}
+
+export async function updateStoredAppSettings(input: Partial<AppSettingsView>) {
+  return mutateData((draft) => {
+    draft.settings = normalizeStoredSettingsUpdate(input, draft.settings);
+    return structuredClone(draft.settings);
+  });
 }
 
 /**

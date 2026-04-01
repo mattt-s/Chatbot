@@ -17,6 +17,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { readStoredAppSettingsSync } from "@/lib/app-settings";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -47,7 +49,13 @@ function parseConfig() {
   if (_parsed) return;
   _parsed = true;
 
-  const raw = process.env.APP_DEBUG?.trim().toLowerCase() ?? "";
+  const storedSettings = readStoredAppSettingsSync();
+  const raw =
+    typeof storedSettings.appDebugEnabled === "boolean"
+      ? storedSettings.appDebugEnabled
+        ? "true"
+        : "false"
+      : process.env.APP_DEBUG?.trim().toLowerCase() ?? "";
   if (!raw || raw === "false" || raw === "0" || raw === "off" || raw === "no") {
     _enabledModules = null;
     return;
@@ -153,19 +161,20 @@ function writeLine(line: string) {
  * log.debug("upsertAssistantMessage", { runId });
  */
 export function createLogger(module: string): ModuleLogger {
-  const enabled = isModuleEnabled(module);
-
-  if (!enabled) {
-    const noop = () => {};
-    return { debug: noop, error: noop, input: noop, output: noop, enabled: false };
-  }
-
   return {
-    enabled: true,
+    get enabled() {
+      return isModuleEnabled(module);
+    },
     debug(fn, data) {
+      if (!isModuleEnabled(module)) {
+        return;
+      }
       writeLine(formatLine("DEBUG", module, fn, "→", data));
     },
     error(fn, err, data) {
+      if (!isModuleEnabled(module)) {
+        return;
+      }
       const errMsg = err instanceof Error ? err.message : String(err);
       const errStack = err instanceof Error ? err.stack : undefined;
       writeLine(
@@ -176,12 +185,31 @@ export function createLogger(module: string): ModuleLogger {
       );
     },
     input(fn, data) {
+      if (!isModuleEnabled(module)) {
+        return;
+      }
       writeLine(formatLine("DEBUG", module, fn, "← input", data));
     },
     output(fn, data) {
+      if (!isModuleEnabled(module)) {
+        return;
+      }
       writeLine(formatLine("DEBUG", module, fn, "→ output", data));
     },
   };
+}
+
+export function invalidateLoggerConfig() {
+  _parsed = false;
+  _enabledModules = null;
+  if (_logFileFd !== null) {
+    try {
+      fs.closeSync(_logFileFd);
+    } catch {
+      // Ignore close errors.
+    }
+    _logFileFd = null;
+  }
 }
 
 /**
@@ -189,10 +217,5 @@ export function createLogger(module: string): ModuleLogger {
  * 关闭已打开的日志文件并清除配置缓存。
  */
 export function _resetLoggerForTests() {
-  _parsed = false;
-  _enabledModules = null;
-  if (_logFileFd !== null) {
-    try { fs.closeSync(_logFileFd); } catch { /* ignore */ }
-    _logFileFd = null;
-  }
+  invalidateLoggerConfig();
 }
