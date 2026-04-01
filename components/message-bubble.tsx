@@ -139,14 +139,14 @@ function MarkdownMessage({ text }: { text: string }) {
             <h3 className="mb-2 text-lg font-semibold leading-7 text-[var(--ink)]">{children}</h3>
           ),
           p: ({ children }) => <p className="mb-3 whitespace-pre-wrap last:mb-0">{children}</p>,
-          ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0 [&_ul]:mb-0 [&_ol]:mb-0">{children}</ul>,
+          ul: ({ children }) => <ul className="mb-3 list-disc pl-5 last:mb-0 [&_ul]:mb-0 [&_ol]:mb-0">{children}</ul>,
           ol: ({ children, start }) => (
-            <ol start={start} className="mb-3 list-decimal space-y-1 pl-5 last:mb-0 [&_ul]:mb-0 [&_ol]:mb-0">
+            <ol start={start} className="mb-3 list-decimal pl-5 last:mb-0 [&_ul]:mb-0 [&_ol]:mb-0">
               {children}
             </ol>
           ),
           li: ({ children }) => (
-            <li className="whitespace-pre-wrap [&>p]:mb-0 [&>ul]:mt-1 [&>ol]:mt-1">
+            <li className="mb-1 [&>p]:mb-0 [&>ul]:mt-1 [&>ol]:mt-1">
               {children}
             </li>
           ),
