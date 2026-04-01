@@ -89,12 +89,12 @@ export function ManageGroupRolesDialog({
             enabledRoles.map((role) => (
               <div
                 key={role.id}
-                className="flex items-center gap-3 rounded-2xl border border-black/8 bg-white px-4 py-3"
+                className="flex items-center gap-2 rounded-2xl border border-black/8 bg-white px-3 py-2.5"
               >
                 {/* 角色信息 */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-[var(--ink)]">
+                    <span className="truncate text-[13px] font-semibold text-[var(--ink)]">
                       {role.title}
                     </span>
                     {role.isLeader && (
@@ -122,7 +122,7 @@ export function ManageGroupRolesDialog({
                             : "空闲"}
                     </span>
                   </div>
-                  <div className="mt-0.5 text-xs text-[var(--ink-soft)]">
+                  <div className="mt-0.5 text-[11px] text-[var(--ink-soft)]">
                     Agent: {role.agentId}
                   </div>
                   {(role.runtimeStatus === "busy" || role.runtimeStatus === "checking" || role.runtimeStatus === "aborting") ? (
@@ -133,7 +133,7 @@ export function ManageGroupRolesDialog({
                 </div>
 
                 {/* 操作按钮 */}
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1">
                   {(role.runtimeStatus === "busy" ||
                     role.runtimeStatus === "checking" ||
                     role.runtimeStatus === "aborting") ? (
@@ -148,7 +148,7 @@ export function ManageGroupRolesDialog({
                           setAbortingId(null);
                         }
                       }}
-                      className="rounded-full border border-red-200 px-2.5 py-1 text-[10px] font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
+                      className="whitespace-nowrap rounded-full border border-red-200 px-2 py-0.5 text-[9px] font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
                     >
                       {role.runtimeStatus === "aborting"
                         ? "终止中..."
@@ -169,7 +169,7 @@ export function ManageGroupRolesDialog({
                         setTogglingId(null);
                       }
                     }}
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition disabled:opacity-60 ${
+                    className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[9px] font-semibold transition disabled:opacity-60 ${
                       role.isLeader
                         ? "border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300"
                         : "border-black/10 text-[var(--ink-soft)] hover:border-[var(--accent)]"
@@ -190,7 +190,7 @@ export function ManageGroupRolesDialog({
                         setDeletingId(null);
                       }
                     }}
-                    className="rounded-full border border-red-200 px-2.5 py-1 text-[10px] font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
+                    className="whitespace-nowrap rounded-full border border-red-200 px-2 py-0.5 text-[9px] font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
                   >
                     {deletingId === role.id ? "..." : "删除"}
                   </button>
