@@ -500,15 +500,20 @@ export function PanelCard({
       setManageGroupRolesDialog((prev) =>
         prev ? { ...prev, roles } : prev,
       );
-      // 同步到父级 panel 的 groupRoles，保留当前 messages 状态避免重置
+      const currentMessages = messagesRef.current;
+      // 同步到父级 panel 的 groupRoles，同时避免依赖新的 panel 对象导致轮询 effect 自触发。
       onPanelReplaced({
-        ...panel,
-        messages: messagesRef.current,
+        ...panelCacheBase,
+        activeRunId: activeRunIdRef.current,
+        messageCount: currentMessages.length,
+        latestMessagePreview: buildLatestMessagePreview(currentMessages),
+        messagesLoaded: true,
+        messages: currentMessages,
         groupRoles: roles,
       });
     }
     return roles;
-  }, [manageGroupRolesDialog?.open, onPanelReplaced, panel]);
+  }, [manageGroupRolesDialog?.open, onPanelReplaced, panel.id, panelCacheBase]);
 
   useEffect(() => {
     if (!manageGroupRolesDialog?.open) {
