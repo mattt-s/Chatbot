@@ -53,6 +53,8 @@ type ProviderIngressPayload = {
   error?: string;
 };
 
+const PROVIDER_INGRESS_PATH = "/customchat/inbound";
+
 /**
  * 判断文件是否为类文本文件（可提取文本内容）
  * @param {string} name - 文件名
@@ -115,11 +117,7 @@ function buildProviderIngressUrl() {
   }
 
   const baseUrl = env.providerBaseUrl.replace(/\/+$/, "");
-  const ingressPath = env.providerIngressPath.startsWith("/")
-    ? env.providerIngressPath
-    : `/${env.providerIngressPath}`;
-
-  return `${baseUrl}${ingressPath}`;
+  return `${baseUrl}${PROVIDER_INGRESS_PATH}`;
 }
 
 /**
@@ -138,8 +136,8 @@ async function dispatchViaProvider(
   uploads: PreparedUpload[],
 ) {
   const env = getEnv();
-  if (!env.providerToken) {
-    throw new Error("CUSTOMCHAT_PROVIDER_TOKEN is not configured.");
+  if (!env.customChatAuthToken) {
+    throw new Error("CUSTOMCHAT_AUTH_TOKEN is not configured.");
   }
 
   const attachments: InboundAttachmentInput[] = uploads.map((upload) => ({
@@ -153,7 +151,7 @@ async function dispatchViaProvider(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${env.providerToken}`,
+      Authorization: `Bearer ${env.customChatAuthToken}`,
     },
     body: JSON.stringify({
       panelId: panel.id,

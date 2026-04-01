@@ -11,7 +11,7 @@ import {
 } from "@/lib/customchat-ingest";
 import { getEnv } from "@/lib/env";
 
-function readSharedSecret(request: Request) {
+function readAuthToken(request: Request) {
   const auth = request.headers.get("authorization");
   if (auth?.startsWith("Bearer ")) {
     return auth.slice("Bearer ".length).trim();
@@ -22,22 +22,22 @@ function readSharedSecret(request: Request) {
 
 /**
  * 接收 customchat 插件投递的消息
- * @description 使用 Bearer Token（CUSTOMCHAT_SHARED_SECRET）认证。将投递数据校验后交给 ingest 流程处理。
+ * @description 使用 Bearer Token（CUSTOMCHAT_AUTH_TOKEN）认证。将投递数据校验后交给 ingest 流程处理。
  * @param request - HTTP 请求对象，Header 携带 Authorization Bearer Token，Body 为 CustomChatDelivery 结构
  * @returns 200 投递结果 | 400 参数无效或不支持的目标 | 401 Token 无效 | 404 面板不存在 | 500 服务端错误
  */
 export async function POST(request: Request) {
   await ensureCustomChatBridgeServer().catch(() => null);
-  const expectedSecret = getEnv().customChatSharedSecret;
-  if (!expectedSecret) {
+  const expectedAuthToken = getEnv().customChatAuthToken;
+  if (!expectedAuthToken) {
     return NextResponse.json(
-      { error: "CUSTOMCHAT_SHARED_SECRET is not configured." },
+      { error: "CUSTOMCHAT_AUTH_TOKEN is not configured." },
       { status: 500 },
     );
   }
 
-  const providedSecret = readSharedSecret(request);
-  if (!providedSecret || providedSecret !== expectedSecret) {
+  const providedAuthToken = readAuthToken(request);
+  if (!providedAuthToken || providedAuthToken !== expectedAuthToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

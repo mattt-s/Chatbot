@@ -80,7 +80,7 @@ async function fetchProviderAgents(
   }
 
   const env = getEnv();
-  if (!env.providerBaseUrl || !env.providerToken) {
+  if (!env.providerBaseUrl || !env.customChatAuthToken) {
     return null;
   }
 
@@ -93,7 +93,7 @@ async function fetchProviderAgents(
     try {
       const response = await fetch(`${baseUrl}/customchat/agents`, {
         headers: {
-          Authorization: `Bearer ${env.providerToken}`,
+          Authorization: `Bearer ${env.customChatAuthToken}`,
         },
         cache: "no-store",
         signal: controller.signal,

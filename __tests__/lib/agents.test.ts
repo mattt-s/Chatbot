@@ -7,7 +7,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/env", () => ({
   getEnv: () => ({
     providerBaseUrl: "http://127.0.0.1:18789",
-    providerToken: "test-token",
+    customChatAuthToken: "test-token",
     agentCatalogJson: '[{"id":"main","name":"Main"},{"id":"coding","name":"Coding","emoji":"🧑‍💻"}]',
   }),
 }));
@@ -83,7 +83,7 @@ describe("agents", () => {
       vi.doMock("@/lib/env", () => ({
         getEnv: () => ({
           providerBaseUrl: "",
-          providerToken: "",
+          customChatAuthToken: "",
           agentCatalogJson: "not valid json",
         }),
       }));

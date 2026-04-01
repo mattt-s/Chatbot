@@ -32,8 +32,7 @@ vi.mock("@/lib/store", () => ({
 vi.mock("@/lib/env", () => ({
   getEnv: () => ({
     providerBaseUrl: "http://localhost:18789",
-    providerIngressPath: "/customchat/inbound",
-    providerToken: "test-token",
+    customChatAuthToken: "test-token",
     groupRoleWatchdogIntervalMs: 30_000,
     groupRoleBusyInspectAfterMs: 300_000,
     groupRoleBusyAbortAfterMs: 600_000,

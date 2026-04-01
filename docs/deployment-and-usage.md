@@ -9,6 +9,14 @@
 
 如需查看底层架构和模块说明，可继续阅读 [project-overview.md](./project-overview.md) 和 [architecture.md](./architecture.md)。
 
+这份文档现在按“约定优于配置”来写：
+
+- plugin 到 app 默认走 `ws://127.0.0.1:3001/api/customchat/socket`
+- bridge host 固定为 `127.0.0.1`，path 固定为 `/api/customchat/socket`
+- 只有 bridge port 允许覆盖；覆盖时需要同时改 app `.env` 和 `openclaw.json`
+- provider ingress path 固定为 `/customchat/inbound`
+- 群组 watchdog 使用内置默认值，不作为常规部署项暴露
+
 ---
 
 ## 一、项目由哪些部分组成
@@ -113,9 +121,8 @@ openclaw plugins list
 {
   "channels": {
     "customchat": {
-      "baseUrl": "http://127.0.0.1:3000",
-      "sharedSecret": "change-me-customchat",
-      "providerToken": "change-me-provider-token"
+      "authToken": "change-me-customchat-token",
+      "bridgePort": 3001
     }
   }
 }
@@ -123,34 +130,26 @@ openclaw plugins list
 
 #### 字段说明
 
-- `baseUrl`
-  插件访问 app 的基础地址。
-- `sharedSecret`
-  插件连接 app bridge / deliver 时使用的鉴权密钥。
-- `providerToken`
-  app 调插件 ingress 时使用的 Bearer Token。这个值建议和 app 侧 `.env` 中的 `CUSTOMCHAT_PROVIDER_TOKEN` 保持一致。
+- `authToken`
+  customchat 的统一鉴权 token，同时用于 app 调插件 ingress 和插件连接 app bridge。
+- `bridgePort`
+  插件回连 app bridge 时使用的端口。默认 `3001`，只有你显式改了 app 侧 bridge 端口时才需要一起改。
 
 #### 哪些是必须的
 
-- `baseUrl`：必须
-- `sharedSecret`：必须
-- `providerToken`：强烈建议配置
+- `authToken`：必须
+- `bridgePort`：可选，默认 `3001`
 
-如果缺少 `baseUrl` 或 `sharedSecret`，插件通常无法正常把消息回推给 app。
+如果缺少 `authToken`，插件无法正常接 ingress 或回推消息。
 
-### 5. 配置优先级
+### 5. 配置原则
 
-插件会优先读取 `~/.openclaw/openclaw.json` 里的 `channels.customchat`。  
-只有在这里读不到时，才会回退到环境变量：
+当前实现里，插件侧以 `~/.openclaw/openclaw.json` 的 `channels.customchat` 作为唯一真源。  
+普通部署不要再额外给 OpenClaw 插件配置环境变量：
 
-- `CUSTOMCHAT_BASE_URL`
-- `CUSTOMCHAT_SHARED_SECRET`
-- `CUSTOMCHAT_PROVIDER_TOKEN`
+- `CUSTOMCHAT_AUTH_TOKEN`
 
-因此更推荐：
-
-- 把 `baseUrl`、`sharedSecret`、`providerToken` 固定写进 `openclaw.json`
-- 环境变量只保留给 fallback 或调试使用
+这些不再是常规部署入口；如果你在文档或旧脚本里看到 `CUSTOMCHAT_BASE_URL`，那已经是旧口径。
 
 ### 6. 插件更新后要不要重启
 
@@ -194,15 +193,21 @@ Docker 更适合下面这些情况：
 - OpenClaw Gateway 已在宿主机正常运行
 - OpenClaw 已安装并启用 `plugins/customchat`
 
-核心环境变量通常包括：
+常规部署时，app 侧真正需要关心的核心环境变量只有：
 
-- `APP_BASE_URL`
 - `APP_SESSION_SECRET`
 - `APP_ADMIN_EMAIL`
 - `APP_ADMIN_PASSWORD`
 - `CUSTOMCHAT_PROVIDER_BASE_URL`
-- `CUSTOMCHAT_PROVIDER_TOKEN`
-- `CUSTOMCHAT_SHARED_SECRET`
+- `CUSTOMCHAT_AUTH_TOKEN`
+- `CUSTOMCHAT_BRIDGE_PORT`（仅当你不用默认 `3001` 时）
+
+其中：
+
+- `APP_BASE_URL` 有合理默认值，通常不需要改
+- `CUSTOMCHAT_PROVIDER_BASE_URL` 默认就是 `http://127.0.0.1:18789`
+- `CUSTOMCHAT_AUTH_TOKEN` 要与 `openclaw.json` 保持一致
+- 如果你改了 `CUSTOMCHAT_BRIDGE_PORT`，要把 `openclaw.json` 里的 `channels.customchat.bridgePort` 改成相同值
 
 ### 3. 启动命令
 
@@ -291,13 +296,13 @@ npm run start
 1. 不要和 Docker 里的 `web` 同时运行
 原因：会抢占 `3000` 和 `3001` 端口。
 
-2. OpenClaw 插件回调地址必须仍然指向当前机器上的 app
-常见配置是：
+2. OpenClaw 插件回调地址仍然按项目约定：
 
 ```text
-http://127.0.0.1:3000
 ws://127.0.0.1:3001/api/customchat/socket
 ```
+
+这里只有 `port` 允许覆盖；如果你把 app `.env` 改成了 `CUSTOMCHAT_BRIDGE_PORT=4001`，也要同步把 `openclaw.json` 改成 `"bridgePort": 4001`。
 
 3. 如果你只是想临时看生产行为，优先考虑：
 

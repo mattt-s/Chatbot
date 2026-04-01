@@ -10,13 +10,13 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "baseUrl": {
+      "authToken": {
         "type": "string",
         "minLength": 1
       },
-      "sharedSecret": {
-        "type": "string",
-        "minLength": 1
+      "bridgePort": {
+        "type": "integer",
+        "minimum": 1
       },
       "accounts": {
         "type": "object",
@@ -24,31 +24,33 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "baseUrl": {
+            "authToken": {
               "type": "string",
               "minLength": 1
             },
-            "sharedSecret": {
-              "type": "string",
-              "minLength": 1
+            "bridgePort": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           "required": [
-            "baseUrl",
-            "sharedSecret"
+            "authToken"
           ]
         }
       }
-    }
+    },
+    "required": [
+      "authToken"
+    ]
   },
   "uiHints": {
-    "baseUrl": {
-      "label": "Base URL",
-      "placeholder": "https://bot.user.work"
-    },
-    "sharedSecret": {
-      "label": "Shared Secret",
+    "authToken": {
+      "label": "Auth Token",
       "sensitive": true
+    },
+    "bridgePort": {
+      "label": "Bridge Port",
+      "placeholder": "3001"
     }
   }
 }

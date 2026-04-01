@@ -87,11 +87,11 @@ flowchart TD
 
 更详细的设计见 [docs/group-technical-design.md](docs/group-technical-design.md)。
 
-相关环境变量：
+当前使用内置默认值：
 
-- `GROUP_ROLE_WATCHDOG_INTERVAL_MS`：watchdog 扫描周期，默认 `30000`
-- `GROUP_ROLE_BUSY_INSPECT_AFTER_MS`：超过多久开始查 session，默认 `300000`
-- `GROUP_ROLE_BUSY_ABORT_AFTER_MS`：超过多久主动 abort，默认 `600000`
+- watchdog 扫描周期：`30000`
+- 超过多久开始查 session：`300000`
+- 超过多久主动 abort：`600000`
 
 ## 整体架构
 
@@ -248,24 +248,25 @@ flowchart TD
 在这个模式下：
 
 - app 容器访问 Gateway：`http://127.0.0.1:18789`
-- OpenClaw 回调 app：`http://127.0.0.1:3000`
+- OpenClaw 插件回推 app：`ws://127.0.0.1:3001/api/customchat/socket`
 
 ## 配置总览
 
-真正需要配置的内容分 3 处：
+主配置分 2 处：
 
 1. app Docker 环境变量
 2. OpenClaw `~/.openclaw/openclaw.json`
-3. OpenClaw systemd 环境变量
+
+`systemd` 环境变量现在只剩调试场景可选，不再是常规部署必需项。
 
 ### 哪些值必须保持一致
 
 以下值是成对使用的，必须一致：
 
-- `CUSTOMCHAT_PROVIDER_TOKEN`
-  app -> OpenClaw 插件 ingress 鉴权；推荐写在 app `.env` 和 OpenClaw `openclaw.json`
-- `CUSTOMCHAT_SHARED_SECRET`
-  OpenClaw 插件 -> app bridge / deliver 鉴权
+- `CUSTOMCHAT_AUTH_TOKEN` / `channels.customchat.authToken`
+  customchat 的统一鉴权 token，同时用于 app -> 插件 HTTP 和 插件 -> app bridge
+- `CUSTOMCHAT_BRIDGE_PORT` / `channels.customchat.bridgePort`
+  只有你不使用默认 `3001` 时才需要同时配置，而且两边必须一致
 
 ## 一、app Docker 环境变量
 
@@ -279,8 +280,7 @@ app 容器使用这些环境变量。推荐直接写在项目根目录的 `.env`
 | `APP_ADMIN_EMAIL` | 是 | `admin@example.com` | 初始管理员邮箱 |
 | `APP_ADMIN_PASSWORD` | 是 | `ChangeMe123!` | 初始管理员密码 |
 | `CUSTOMCHAT_PROVIDER_BASE_URL` | 是 | `http://127.0.0.1:18789` | app 访问 OpenClaw 插件 ingress 的地址 |
-| `CUSTOMCHAT_PROVIDER_TOKEN` | 是 | `change-me-provider-token` | app 调 OpenClaw 插件 ingress 的鉴权 token |
-| `CUSTOMCHAT_SHARED_SECRET` | 是 | `change-me-customchat` | OpenClaw 插件把回流事件发回 app 时使用的鉴权 secret |
+| `CUSTOMCHAT_AUTH_TOKEN` | 是 | `change-me-customchat-token` | customchat 统一鉴权 token，同时用于 app -> 插件 HTTP 和 插件 -> app bridge |
 
 ### 推荐变量
 
@@ -289,15 +289,12 @@ app 容器使用这些环境变量。推荐直接写在项目根目录的 `.env`
 | `APP_BASE_URL` | 推荐 | `http://127.0.0.1:3000` | app 自己的外部访问地址，用于 cookie secure 判断等 |
 | `APP_ADMIN_NAME` | 否 | `Channel Admin` | 初始管理员显示名 |
 | `APP_AGENT_CATALOG` | 否 | `[{"id":"main","name":"Main"}]` | provider 拉取失败时的 agent fallback 列表 |
+| `CUSTOMCHAT_BRIDGE_PORT` | 否 | `3001` | app bridge WebSocket 监听端口；只有端口冲突时才需要改 |
 
 ### 一般不用改的变量
 
 | 变量 | 默认值 | 作用 |
 |---|---|---|
-| `CUSTOMCHAT_PROVIDER_INGRESS_PATH` | `/customchat/inbound` | app 调 OpenClaw 插件 ingress 的路径。只有你改了插件侧路径时才需要一起改 |
-| `CUSTOMCHAT_APP_WS_HOST` | `127.0.0.1` | app 内部 bridge WebSocket 监听地址 |
-| `CUSTOMCHAT_APP_WS_PORT` | `3001` | app 内部 bridge WebSocket 监听端口 |
-| `CUSTOMCHAT_APP_WS_PATH` | `/api/customchat/socket` | app 内部 bridge WebSocket 路径 |
 | `APP_UID` | `1000` | Docker 容器运行用户 UID |
 | `APP_GID` | `1000` | Docker 容器运行用户 GID |
 
@@ -311,8 +308,8 @@ APP_ADMIN_PASSWORD=ChangeMe123!
 APP_ADMIN_NAME=Channel Admin
 
 CUSTOMCHAT_PROVIDER_BASE_URL=http://127.0.0.1:18789
-CUSTOMCHAT_PROVIDER_TOKEN=change-me-provider-token
-CUSTOMCHAT_SHARED_SECRET=change-me-customchat
+CUSTOMCHAT_AUTH_TOKEN=change-me-customchat-token
+CUSTOMCHAT_BRIDGE_PORT=3001
 
 APP_AGENT_CATALOG=[{"id":"main","name":"Main"},{"id":"coding","name":"coding","emoji":"🧑‍💻"},{"id":"ui-designer","name":"UI Designer","emoji":"🎨"},{"id":"lucy","name":"Lucy","emoji":"📚"}]
 ```
@@ -329,9 +326,8 @@ OpenClaw 的 channel 主配置写在：
 {
   "channels": {
     "customchat": {
-      "baseUrl": "http://127.0.0.1:3000",
-      "sharedSecret": "change-me-customchat",
-      "providerToken": "change-me-provider-token"
+      "authToken": "change-me-customchat-token",
+      "bridgePort": 3001
     }
   }
 }
@@ -341,24 +337,21 @@ OpenClaw 的 channel 主配置写在：
 
 | 字段 | 必需 | 作用 |
 |---|---|---|
-| `channels.customchat.baseUrl` | 是 | OpenClaw 插件访问 app 的基础地址 |
-| `channels.customchat.sharedSecret` | 是 | OpenClaw 插件连接 app bridge / deliver 时的鉴权 secret |
-| `channels.customchat.providerToken` | 推荐 | OpenClaw 插件 ingress 的 Bearer Token；app 侧 `CUSTOMCHAT_PROVIDER_TOKEN` 必须与之保持一致 |
+| `channels.customchat.authToken` | 是 | customchat 统一鉴权 token；app 侧 `CUSTOMCHAT_AUTH_TOKEN` 必须与之保持一致 |
+| `channels.customchat.bridgePort` | 否 | OpenClaw 插件回连 app bridge 的端口；默认 `3001` |
 
 ### 优先级说明
 
-对于 `baseUrl`、`sharedSecret` 和 `providerToken`：
+对于 `authToken` 和 `bridgePort`：
 
-1. 先读 `openclaw.json` 的 `channels.customchat`
-2. 读不到时，才回退到环境变量：
-   - `CUSTOMCHAT_BASE_URL`
-   - `CUSTOMCHAT_SHARED_SECRET`
-   - `CUSTOMCHAT_PROVIDER_TOKEN`
+1. 插件先读 `openclaw.json` 的 `channels.customchat`
+2. app 读取自己的 `.env`
+3. 其中只有 `bridgePort` 会在两边各留一份，这是因为 app 无法读取 `openclaw.json`
 
 建议做法：
 
-- 把 `baseUrl/sharedSecret/providerToken` 固定写在 `openclaw.json`
-- 环境变量只保留真正没有配置文件入口的内容
+- 把 `authToken` 固定写在 `openclaw.json`
+- 只有 bridge 端口冲突时，才同时改 `.env` 里的 `CUSTOMCHAT_BRIDGE_PORT` 和 `openclaw.json` 里的 `channels.customchat.bridgePort`
 
 ## 三、OpenClaw systemd 环境变量
 
@@ -369,32 +362,27 @@ OpenClaw 宿主机需要给 `openclaw-gateway` 进程补一组环境变量。
 
 ### 现在是否还有必需变量
 
-当前实现里，`baseUrl`、`sharedSecret`、`providerToken` 都已经支持直接从 `~/.openclaw/openclaw.json` 读取。
+当前实现里，插件需要的核心配置都可以直接从 `~/.openclaw/openclaw.json` 读取。
 
 所以：
 
-- `CUSTOMCHAT_PROVIDER_TOKEN` 不再是必须写进 systemd 环境变量的项目
+- `CUSTOMCHAT_AUTH_TOKEN` 不再是必须写进 systemd 环境变量的项目
 - `OPENCLAW_GATEWAY_HTTP_URL` 当前代码已经不再使用，不需要配置
 
-### 可选 fallback 变量
+### 可选变量
 
 | 变量 | 是否必须 | 示例 | 作用 |
 |---|---|---|---|
-| `CUSTOMCHAT_BASE_URL` | 否 | `http://127.0.0.1:3000` | `channels.customchat.baseUrl` 的 fallback |
-| `CUSTOMCHAT_SHARED_SECRET` | 否 | `change-me-customchat` | `channels.customchat.sharedSecret` 的 fallback |
-| `CUSTOMCHAT_PROVIDER_TOKEN` | 否 | `change-me-provider-token` | `channels.customchat.providerToken` 的 fallback |
 | `CUSTOMCHAT_DEBUG` | 否 | `true` | 开启插件 debug 日志 |
 
 ### 推荐 `customchat.conf`
 
 ```ini
 [Service]
-Environment=CUSTOMCHAT_BASE_URL=http://127.0.0.1:3000
-Environment=CUSTOMCHAT_SHARED_SECRET=change-me-customchat
-Environment=CUSTOMCHAT_PROVIDER_TOKEN=change-me-provider-token
+Environment=CUSTOMCHAT_DEBUG=true
 ```
 
-如果你已经把这三个值都写进了 `openclaw.json`，这个 drop-in 可以只保留 `CUSTOMCHAT_DEBUG`，甚至完全不需要。
+如果你不需要插件 debug 日志，这个 drop-in 甚至可以完全不写。
 
 修改后执行：
 
@@ -412,8 +400,7 @@ systemctl --user restart openclaw-gateway
 由 app 使用：
 
 - `CUSTOMCHAT_PROVIDER_BASE_URL`
-- `CUSTOMCHAT_PROVIDER_TOKEN`
-- `CUSTOMCHAT_PROVIDER_INGRESS_PATH`
+- `CUSTOMCHAT_AUTH_TOKEN`
 
 用途：
 
@@ -423,37 +410,25 @@ systemctl --user restart openclaw-gateway
 
 由 OpenClaw 插件使用：
 
-- `channels.customchat.baseUrl`
-- `channels.customchat.sharedSecret`
-
-或 fallback：
-
-- `CUSTOMCHAT_BASE_URL`
-- `CUSTOMCHAT_SHARED_SECRET`
+- `channels.customchat.authToken`
+- `channels.customchat.bridgePort`
 
 用途：
 
-- 把 assistant 文本、runtime steps、附件事件回送到 app
+- `authToken` 同时用于 app -> 插件 ingress 鉴权 和 插件 -> app bridge 鉴权
+- `bridgePort` 用于插件 -> app bridge 回连
 
 ### app bridge WebSocket
 
-app 使用：
+bridge host 和 path 现在是固定约定：
 
-- `CUSTOMCHAT_APP_WS_HOST`
-- `CUSTOMCHAT_APP_WS_PORT`
-- `CUSTOMCHAT_APP_WS_PATH`
+- host：`127.0.0.1`
+- path：`/api/customchat/socket`
 
-插件使用：
+只有端口允许覆盖：
 
-- `CUSTOMCHAT_APP_WS_URL`
-
-如果不显式设置 `CUSTOMCHAT_APP_WS_URL`，插件会根据：
-
-- `channels.customchat.baseUrl`
-- `CUSTOMCHAT_APP_WS_PORT`
-- `CUSTOMCHAT_APP_WS_PATH`
-
-自动拼出 bridge 地址。
+- app 侧：`CUSTOMCHAT_BRIDGE_PORT`
+- 插件侧：`channels.customchat.bridgePort`
 
 同机部署默认就是：
 
@@ -514,7 +489,7 @@ curl -I http://127.0.0.1:3000/login
 
 ```bash
 node - <<'NODE'
-const ws = new WebSocket("ws://127.0.0.1:3001/api/customchat/socket?token=YOUR_CUSTOMCHAT_SHARED_SECRET");
+const ws = new WebSocket("ws://127.0.0.1:3001/api/customchat/socket?token=YOUR_CUSTOMCHAT_AUTH_TOKEN");
 ws.addEventListener("open", () => console.log("OPEN"));
 ws.addEventListener("message", (event) => {
   console.log(String(event.data));
@@ -532,7 +507,7 @@ NODE
 ### 检查 provider agents
 
 ```bash
-curl -H "Authorization: Bearer YOUR_CUSTOMCHAT_PROVIDER_TOKEN" \
+curl -H "Authorization: Bearer YOUR_CUSTOMCHAT_AUTH_TOKEN" \
   http://127.0.0.1:18789/customchat/agents
 ```
 
@@ -563,7 +538,7 @@ curl -b /tmp/chatbot-cookies.txt http://127.0.0.1:3000/api/agents
 
 优先检查：
 
-- app 的 `CUSTOMCHAT_PROVIDER_TOKEN` 是否和 `openclaw.json` 里的 `channels.customchat.providerToken` 一致
+- app 的 `CUSTOMCHAT_AUTH_TOKEN` 是否和 `openclaw.json` 里的 `channels.customchat.authToken` 一致
 - `http://127.0.0.1:18789/customchat/agents` 是否能返回真实 agent
 
 ### 2. 有 emoji 没头像，或者头像不显示
@@ -573,14 +548,16 @@ curl -b /tmp/chatbot-cookies.txt http://127.0.0.1:3000/api/agents
 - `http://127.0.0.1:18789/customchat/agent-avatar?agentId=<id>` 是否能返回图片
 - `http://127.0.0.1:3000/api/agents/<id>/avatar` 在登录后是否返回 `200`
 
-### 3. `baseUrl` 到底配 config 还是环境变量
+### 3. bridge 端口要不要配
 
 推荐：
 
-- 主配置写 `openclaw.json`
-- 环境变量只保留 fallback
+- 不改端口时，什么都不用配，默认就是 `3001`
+- 只有端口冲突时，才同时改：
+  - app `.env`：`CUSTOMCHAT_BRIDGE_PORT`
+  - OpenClaw `openclaw.json`：`channels.customchat.bridgePort`
 
-这样以后排查时，`openclaw.json` 是唯一真源，不容易混乱。
+这样虽然 `bridgePort` 不可避免地分成两处，但职责仍然清楚：app 只读 `.env`，插件只读 `openclaw.json`。
 
 ### 4. 为什么 app 是 `host` 网络
 

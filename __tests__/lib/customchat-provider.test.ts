@@ -7,7 +7,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/env", () => ({
   getEnv: () => ({
     providerBaseUrl: "http://127.0.0.1:18789",
-    providerToken: "test-token",
+    customChatAuthToken: "test-token",
   }),
 }));
 
@@ -98,10 +98,10 @@ describe("customchat-provider", () => {
 describe("customchat-provider without config", () => {
   it("throws when providerBaseUrl is empty", async () => {
     vi.doMock("@/lib/env", () => ({
-      getEnv: () => ({
-        providerBaseUrl: "",
-        providerToken: "token",
-      }),
+        getEnv: () => ({
+          providerBaseUrl: "",
+          customChatAuthToken: "token",
+        }),
     }));
 
     // Reset module to pick up new mock

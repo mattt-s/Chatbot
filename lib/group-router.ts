@@ -53,6 +53,7 @@ interface BusyRoleState {
 }
 
 const PREQUEUE_VERIFY_AFTER_MS = 15_000;
+const PROVIDER_INGRESS_PATH = "/customchat/inbound";
 
 // ────────────────────────────────────────────
 // In-memory state
@@ -593,11 +594,7 @@ function buildProviderIngressUrl(): string {
   }
 
   const baseUrl = env.providerBaseUrl.replace(/\/+$/, "");
-  const ingressPath = env.providerIngressPath.startsWith("/")
-    ? env.providerIngressPath
-    : `/${env.providerIngressPath}`;
-
-  return `${baseUrl}${ingressPath}`;
+  return `${baseUrl}${PROVIDER_INGRESS_PATH}`;
 }
 
 async function dispatchToRole(params: {
@@ -610,8 +607,8 @@ async function dispatchToRole(params: {
   isFirstCall: boolean;
 }) {
   const env = getEnv();
-  if (!env.providerToken) {
-    throw new Error("CUSTOMCHAT_PROVIDER_TOKEN is not configured.");
+  if (!env.customChatAuthToken) {
+    throw new Error("CUSTOMCHAT_AUTH_TOKEN is not configured.");
   }
 
   if (!checkDispatchLimit(params.panelId)) {
@@ -638,7 +635,7 @@ async function dispatchToRole(params: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${env.providerToken}`,
+      Authorization: `Bearer ${env.customChatAuthToken}`,
     },
     body: JSON.stringify({
       panelId: params.panelId,

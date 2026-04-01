@@ -19,10 +19,8 @@ describe("getEnv", () => {
     delete process.env.APP_ADMIN_PASSWORD;
     delete process.env.APP_ADMIN_NAME;
     delete process.env.CUSTOMCHAT_PROVIDER_BASE_URL;
-    delete process.env.CUSTOMCHAT_PROVIDER_TOKEN;
-    delete process.env.CUSTOMCHAT_APP_WS_PORT;
-    delete process.env.CUSTOMCHAT_APP_WS_HOST;
-    delete process.env.CUSTOMCHAT_APP_WS_PATH;
+    delete process.env.CUSTOMCHAT_AUTH_TOKEN;
+    delete process.env.CUSTOMCHAT_BRIDGE_PORT;
 
     const { getEnv } = await import("@/lib/env");
     const env = getEnv();
@@ -31,10 +29,11 @@ describe("getEnv", () => {
     expect(env.adminEmail).toBe("admin@example.com");
     expect(env.adminPassword).toBe("ChangeMe123!");
     expect(env.adminName).toBe("Channel Admin");
-    expect(env.customChatBridgeHost).toBe("127.0.0.1");
+    expect(env.customChatAuthToken).toBe("");
     expect(env.customChatBridgePort).toBe(3001);
-    expect(env.customChatBridgePath).toBe("/api/customchat/socket");
-    expect(env.providerIngressPath).toBe("/customchat/inbound");
+    expect(env.groupRoleWatchdogIntervalMs).toBe(30_000);
+    expect(env.groupRoleBusyInspectAfterMs).toBe(300_000);
+    expect(env.groupRoleBusyAbortAfterMs).toBe(600_000);
   });
 
   it("reads APP_BASE_URL", async () => {
@@ -53,16 +52,11 @@ describe("getEnv", () => {
     expect(env.cookieSecure).toBe(false);
   });
 
-  it("parses custom WS port", async () => {
-    process.env.CUSTOMCHAT_APP_WS_PORT = "4001";
+  it("parses CUSTOMCHAT_BRIDGE_PORT override", async () => {
+    process.env.CUSTOMCHAT_BRIDGE_PORT = "4011";
     const { getEnv } = await import("@/lib/env");
-    expect(getEnv().customChatBridgePort).toBe(4001);
-  });
-
-  it("falls back to 3001 for invalid WS port", async () => {
-    process.env.CUSTOMCHAT_APP_WS_PORT = "not-a-number";
-    const { getEnv } = await import("@/lib/env");
-    expect(getEnv().customChatBridgePort).toBe(3001);
+    const env = getEnv();
+    expect(env.customChatBridgePort).toBe(4011);
   });
 });
 

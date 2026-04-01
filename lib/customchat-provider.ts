@@ -26,17 +26,17 @@ function buildProviderBaseUrl() {
 }
 
 /**
- * 读取 Provider 认证令牌
+ * 读取 customchat 统一认证令牌
  * @returns {string} Bearer 令牌
- * @throws {Error} 未配置 CUSTOMCHAT_PROVIDER_TOKEN 时抛出
+ * @throws {Error} 未配置 CUSTOMCHAT_AUTH_TOKEN 时抛出
  */
-function readProviderToken() {
+function readCustomChatAuthToken() {
   const env = getEnv();
-  if (!env.providerToken) {
-    throw new Error("CUSTOMCHAT_PROVIDER_TOKEN is not configured.");
+  if (!env.customChatAuthToken) {
+    throw new Error("CUSTOMCHAT_AUTH_TOKEN is not configured.");
   }
 
-  return env.providerToken;
+  return env.customChatAuthToken;
 }
 
 /**
@@ -68,7 +68,7 @@ export async function deleteProviderSession(input: {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${readProviderToken()}`,
+      Authorization: `Bearer ${readCustomChatAuthToken()}`,
     },
     body: JSON.stringify({
       panelId: input.panelId,
@@ -120,7 +120,7 @@ export async function inspectProviderSession(input: {
   const response = await fetch(`${buildProviderBaseUrl()}/customchat/session?${query.toString()}`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${readProviderToken()}`,
+      Authorization: `Bearer ${readCustomChatAuthToken()}`,
     },
     cache: "no-store",
   });
@@ -181,7 +181,7 @@ export async function readProviderSessionStatus(input: {
   const response = await fetch(`${buildProviderBaseUrl()}/customchat/status?${query.toString()}`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${readProviderToken()}`,
+      Authorization: `Bearer ${readCustomChatAuthToken()}`,
     },
     cache: "no-store",
   });
@@ -233,7 +233,7 @@ export async function abortProviderRun(input: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${readProviderToken()}`,
+      Authorization: `Bearer ${readCustomChatAuthToken()}`,
     },
     body: JSON.stringify({
       panelId: input.panelId,

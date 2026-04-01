@@ -7,7 +7,10 @@ import path from "node:path";
 
 const DEFAULT_DOWNLOAD_DIR_NAME = "downloads";
 const DEFAULT_VOICE_DIR_NAME = "voice";
-const DEFAULT_PROVIDER_INGRESS_PATH = "/customchat/inbound";
+const DEFAULT_CUSTOMCHAT_BRIDGE_PORT = 3001;
+const DEFAULT_GROUP_ROLE_WATCHDOG_INTERVAL_MS = 30_000;
+const DEFAULT_GROUP_ROLE_BUSY_INSPECT_AFTER_MS = 5 * 60_000;
+const DEFAULT_GROUP_ROLE_BUSY_ABORT_AFTER_MS = 10 * 60_000;
 
 function parseBoolean(value: string | undefined) {
   if (typeof value !== "string") {
@@ -24,24 +27,27 @@ function parseBoolean(value: string | undefined) {
   return null;
 }
 
-function parsePositiveInt(value: string | undefined, fallback: number) {
-  const parsed = Number.parseInt(value?.trim() || "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+function parseInteger(value: string | undefined, fallback: number) {
+  if (typeof value !== "string" || !value.trim()) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
 }
 
 /**
  * 读取并返回所有应用环境变量配置。
  * 未设置的变量会使用合理的默认值。
  *
- * @returns {{ appBaseUrl: string, cookieSecure: boolean, sessionSecret: string, adminEmail: string, adminPassword: string, adminName: string, agentCatalogJson: string, providerBaseUrl: string, providerToken: string, providerIngressPath: string, customChatSharedSecret: string, customChatBridgeHost: string, customChatBridgePort: number, customChatBridgePath: string }} 环境变量配置对象
+ * @returns {{ appBaseUrl: string, cookieSecure: boolean, sessionSecret: string, adminEmail: string, adminPassword: string, adminName: string, agentCatalogJson: string, providerBaseUrl: string, customChatAuthToken: string, customChatBridgePort: number, groupRoleWatchdogIntervalMs: number, groupRoleBusyInspectAfterMs: number, groupRoleBusyAbortAfterMs: number }} 环境变量配置对象
  */
 export function getEnv() {
   const appBaseUrl = process.env.APP_BASE_URL ?? "http://127.0.0.1:3000";
   const cookieSecureFromEnv = parseBoolean(process.env.APP_COOKIE_SECURE);
-  const customChatBridgePort = Number.parseInt(
-    process.env.CUSTOMCHAT_APP_WS_PORT?.trim() || "3001",
-    10,
-  );
 
   return {
     appBaseUrl,
@@ -54,32 +60,14 @@ export function getEnv() {
     adminName: process.env.APP_ADMIN_NAME ?? "Channel Admin",
     agentCatalogJson: process.env.APP_AGENT_CATALOG?.trim() || "",
     providerBaseUrl: process.env.CUSTOMCHAT_PROVIDER_BASE_URL?.trim() || "",
-    providerToken: process.env.CUSTOMCHAT_PROVIDER_TOKEN?.trim() || "",
-    providerIngressPath:
-      process.env.CUSTOMCHAT_PROVIDER_INGRESS_PATH?.trim() ||
-      DEFAULT_PROVIDER_INGRESS_PATH,
-    customChatSharedSecret:
-      process.env.CUSTOMCHAT_SHARED_SECRET?.trim() || "",
-    customChatBridgeHost:
-      process.env.CUSTOMCHAT_APP_WS_HOST?.trim() || "127.0.0.1",
-    customChatBridgePort:
-      Number.isFinite(customChatBridgePort) && customChatBridgePort > 0
-        ? customChatBridgePort
-        : 3001,
-    customChatBridgePath:
-      process.env.CUSTOMCHAT_APP_WS_PATH?.trim() || "/api/customchat/socket",
-    groupRoleWatchdogIntervalMs: parsePositiveInt(
-      process.env.GROUP_ROLE_WATCHDOG_INTERVAL_MS,
-      30_000,
+    customChatAuthToken: process.env.CUSTOMCHAT_AUTH_TOKEN?.trim() || "",
+    customChatBridgePort: parseInteger(
+      process.env.CUSTOMCHAT_BRIDGE_PORT,
+      DEFAULT_CUSTOMCHAT_BRIDGE_PORT,
     ),
-    groupRoleBusyInspectAfterMs: parsePositiveInt(
-      process.env.GROUP_ROLE_BUSY_INSPECT_AFTER_MS,
-      5 * 60_000,
-    ),
-    groupRoleBusyAbortAfterMs: parsePositiveInt(
-      process.env.GROUP_ROLE_BUSY_ABORT_AFTER_MS,
-      10 * 60_000,
-    ),
+    groupRoleWatchdogIntervalMs: DEFAULT_GROUP_ROLE_WATCHDOG_INTERVAL_MS,
+    groupRoleBusyInspectAfterMs: DEFAULT_GROUP_ROLE_BUSY_INSPECT_AFTER_MS,
+    groupRoleBusyAbortAfterMs: DEFAULT_GROUP_ROLE_BUSY_ABORT_AFTER_MS,
   };
 }
 

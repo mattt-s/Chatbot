@@ -175,8 +175,8 @@ type InboundAttachmentPayload = {
 
 type AccountConfig = {
   accountId: string;
-  baseUrl: string;
-  sharedSecret: string;
+  authToken: string;
+  bridgePort: number;
 };
 
 type ChannelContext = {
@@ -252,13 +252,15 @@ type GatewayDeviceIdentity = {
   deviceToken?: string;
 };
 
-const DEFAULT_INGRESS_PATH =
-  process.env.CUSTOMCHAT_PROVIDER_INGRESS_PATH?.trim() || "/customchat/inbound";
+const DEFAULT_INGRESS_PATH = "/customchat/inbound";
 const DEFAULT_AGENTS_PATH = "/customchat/agents";
 const DEFAULT_AGENT_AVATAR_PATH = "/customchat/agent-avatar";
 const DEFAULT_SESSION_PATH = "/customchat/session";
 const DEFAULT_STATUS_PATH = "/customchat/status";
 const DEFAULT_ABORT_PATH = "/customchat/abort";
+const DEFAULT_APP_BRIDGE_HOST = "127.0.0.1";
+const DEFAULT_APP_BRIDGE_PORT = "3001";
+const DEFAULT_APP_BRIDGE_PATH = "/api/customchat/socket";
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const ACTIVE_RUN_RECOVERY_INTERVAL_MS = 60_000;
 const ACTIVE_RUN_RECOVERY_THROTTLE_MS = 2_500;
@@ -482,12 +484,12 @@ let portalPingTimer: ReturnType<typeof globalThis.setInterval> | null = null;
 let portalReconnectAttempts = 0;
 
 /**
- * 从原始配置中解析并验证账户配置（baseUrl + sharedSecret）。
- * 支持多账户配置（accounts 嵌套）和环境变量回退。
+ * 从原始配置中解析并验证账户配置（authToken + 可选 bridgePort）。
+ * 支持多账户配置（accounts 嵌套），配置唯一真源是 openclaw.json。
  * @param rawConfig - 原始频道配置
  * @param accountId - 账户 ID
  * @returns 解析后的 AccountConfig
- * @throws 缺少 baseUrl 或 sharedSecret 时抛出 Error
+ * @throws 缺少 authToken 时抛出 Error
  */
 function normalizeAccountConfig(rawConfig: unknown, accountId: string): AccountConfig {
   const directConfig = asJsonRecord(rawConfig);
@@ -502,25 +504,31 @@ function normalizeAccountConfig(rawConfig: unknown, accountId: string): AccountC
       ? accounts[accountId]
       : directConfig;
 
-  const baseUrl =
-    typeof resolved.baseUrl === "string" && resolved.baseUrl.trim()
-      ? resolved.baseUrl.trim().replace(/\/+$/, "")
-      : process.env.CUSTOMCHAT_BASE_URL?.trim().replace(/\/+$/, "") || null;
-  const sharedSecret =
-    typeof resolved.sharedSecret === "string" && resolved.sharedSecret.trim()
-      ? resolved.sharedSecret.trim()
-      : process.env.CUSTOMCHAT_SHARED_SECRET?.trim() || null;
+  const authToken =
+    typeof resolved.authToken === "string" && resolved.authToken.trim()
+      ? resolved.authToken.trim()
+      : null;
+  const parsedBridgePort =
+    typeof resolved.bridgePort === "number" && Number.isFinite(resolved.bridgePort)
+      ? Math.trunc(resolved.bridgePort)
+      : typeof resolved.bridgePort === "string" && resolved.bridgePort.trim()
+        ? Number.parseInt(resolved.bridgePort.trim(), 10)
+        : Number.parseInt(DEFAULT_APP_BRIDGE_PORT, 10);
+  const bridgePort =
+    Number.isFinite(parsedBridgePort) && parsedBridgePort > 0
+      ? parsedBridgePort
+      : Number.parseInt(DEFAULT_APP_BRIDGE_PORT, 10);
 
-  if (!baseUrl || !sharedSecret) {
+  if (!authToken) {
     throw new Error(
-      "customchat requires channels.customchat.baseUrl and channels.customchat.sharedSecret",
+      "customchat requires channels.customchat.authToken",
     );
   }
 
   return {
     accountId,
-    baseUrl,
-    sharedSecret,
+    authToken,
+    bridgePort,
   };
 }
 
@@ -881,9 +889,8 @@ async function findAgentAvatarPath(record: JsonRecord, agentId: string) {
 }
 
 /**
- * 读取入站请求的认证令牌。
- * 优先使用 ~/.openclaw/openclaw.json 中的 channels.customchat.providerToken，
- * 读不到时回退到环境变量 CUSTOMCHAT_PROVIDER_TOKEN。
+ * 读取统一认证令牌。
+ * 只使用 ~/.openclaw/openclaw.json 中的 channels.customchat.authToken。
  */
 async function getInboundToken() {
   if (cachedInboundToken !== null) {
@@ -895,16 +902,16 @@ async function getInboundToken() {
     const raw = JSON.parse(await fs.readFile(configPath, "utf8")) as JsonRecord;
     const channels = asJsonRecord(raw.channels);
     const customchat = asJsonRecord(channels.customchat);
-    const providerToken = extractStringValue(customchat.providerToken);
-    if (providerToken) {
-      cachedInboundToken = providerToken;
-      return providerToken;
+    const authToken = extractStringValue(customchat.authToken);
+    if (authToken) {
+      cachedInboundToken = authToken;
+      return authToken;
     }
   } catch {
-    // Ignore config read failures and fall back to env.
+    // Ignore config read failures and report missing token below.
   }
 
-  cachedInboundToken = process.env.CUSTOMCHAT_PROVIDER_TOKEN?.trim() || "";
+  cachedInboundToken = "";
   return cachedInboundToken;
 }
 
@@ -956,23 +963,14 @@ let cachedInboundToken: string | null = null;
 
 /**
  * 解析默认账户配置，带模块级缓存。
- * 优先使用环境变量，失败时回退到 ~/.openclaw/openclaw.json 配置文件。
- * 解决了 jiti 加载环境下 process.env 偶发失效的问题。
+ * 唯一真源是 ~/.openclaw/openclaw.json 中的 channels.customchat 配置。
  * @returns 默认账户配置
- * @throws 无法获取 baseUrl 或 sharedSecret 时抛出 Error
+ * @throws 无法获取 authToken 时抛出 Error
  */
 async function resolveDefaultAccountConfig(): Promise<AccountConfig> {
   if (cachedDefaultAccountConfig) {
     return cachedDefaultAccountConfig;
   }
-  // First try: env vars (fast path)
-  const baseUrlEnv = process.env.CUSTOMCHAT_BASE_URL?.trim().replace(/\/+$/, "") || null;
-  const sharedSecretEnv = process.env.CUSTOMCHAT_SHARED_SECRET?.trim() || null;
-  if (baseUrlEnv && sharedSecretEnv) {
-    cachedDefaultAccountConfig = { accountId: "default", baseUrl: baseUrlEnv, sharedSecret: sharedSecretEnv };
-    return cachedDefaultAccountConfig;
-  }
-  // Fallback: read ~/.openclaw/openclaw.json directly
   try {
     const configPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
     const raw = JSON.parse(await fs.readFile(configPath, "utf8"));
@@ -1010,17 +1008,8 @@ function resolveGatewayWsUrl() {
  * @returns WebSocket URL 字符串
  */
 function resolvePortalWsUrl(accountConfig: AccountConfig) {
-  const explicit = process.env.CUSTOMCHAT_APP_WS_URL?.trim() || "";
-  if (explicit) {
-    return explicit;
-  }
-
-  const baseUrl = new URL(accountConfig.baseUrl);
-  const protocol = baseUrl.protocol === "https:" ? "wss:" : "ws:";
-  const port = process.env.CUSTOMCHAT_APP_WS_PORT?.trim() || "3001";
-  const routePath = process.env.CUSTOMCHAT_APP_WS_PATH?.trim() || "/api/customchat/socket";
-  const wsUrl = new URL(`${protocol}//${baseUrl.hostname}:${port}${routePath.startsWith("/") ? routePath : `/${routePath}`}`);
-  wsUrl.searchParams.set("token", accountConfig.sharedSecret);
+  const wsUrl = new URL(`ws://${DEFAULT_APP_BRIDGE_HOST}:${accountConfig.bridgePort}${DEFAULT_APP_BRIDGE_PATH}`);
+  wsUrl.searchParams.set("token", accountConfig.authToken);
   return wsUrl.toString();
 }
 

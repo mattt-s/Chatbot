@@ -31,7 +31,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const { agentId } = await context.params;
   const env = getEnv();
-  if (!env.providerBaseUrl || !env.providerToken) {
+  if (!env.providerBaseUrl || !env.customChatAuthToken) {
     return NextResponse.json({ error: "Provider unavailable." }, { status: 503 });
   }
 
@@ -39,7 +39,7 @@ export async function GET(_request: Request, context: RouteContext) {
     `${env.providerBaseUrl.replace(/\/+$/, "")}/customchat/agent-avatar?agentId=${encodeURIComponent(agentId)}`,
     {
       headers: {
-        Authorization: `Bearer ${env.providerToken}`,
+        Authorization: `Bearer ${env.customChatAuthToken}`,
       },
       cache: "no-store",
     },

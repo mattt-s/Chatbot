@@ -24,9 +24,8 @@ openclaw plugins install --link ./plugins/customchat
 {
   "channels": {
     "customchat": {
-      "baseUrl": "https://your-app.example.com",
-      "sharedSecret": "same-value-as-CUSTOMCHAT_SHARED_SECRET",
-      "providerToken": "same-value-as-app-CUSTOMCHAT_PROVIDER_TOKEN"
+      "authToken": "same-value-as-app-CUSTOMCHAT_AUTH_TOKEN",
+      "bridgePort": 3001
     }
   }
 }
@@ -34,21 +33,15 @@ openclaw plugins install --link ./plugins/customchat
 
 ## 环境变量
 
-```bash
-CUSTOMCHAT_SHARED_SECRET=...
-CUSTOMCHAT_BASE_URL=https://your-app.example.com
-```
-
 说明：
 
-- `baseUrl`、`sharedSecret`、`providerToken` 现在都可以直接写在 `~/.openclaw/openclaw.json`
-- 这里的环境变量只作为 fallback
-- `CUSTOMCHAT_PROVIDER_TOKEN` 只有在你不想把它写进 `openclaw.json` 时才需要保留
+- `authToken`、`bridgePort` 可以直接写在 `~/.openclaw/openclaw.json`
+- 插件现在不再使用 `baseUrl`
+- `bridgePort` 默认就是 `3001`，只有你改了 app 侧 bridge 端口时才需要配置
 
 可选：
 
 ```bash
-CUSTOMCHAT_PROVIDER_INGRESS_PATH=/customchat/inbound
 OPENCLAW_CUSTOMCHAT_STORAGE_ROOT=/home/you/.openclaw/channels/customchat
 CUSTOMCHAT_OPENCLAW_BIN=openclaw
 ```
@@ -76,16 +69,16 @@ CUSTOMCHAT_OPENCLAW_BIN=openclaw
 
 插件会：
 
-1. 校验 `channels.customchat.providerToken`（或 fallback `CUSTOMCHAT_PROVIDER_TOKEN`）
+1. 校验 `channels.customchat.authToken`
 2. 把附件落到 OpenClaw 主机本地
 3. 调用 `openclaw agent --channel customchat --to channel:123 --deliver`
 
 ## 出站
 
-agent 回复时，插件会把文本和附件 POST 到：
+agent 回复时，插件会把文本和附件通过 WebSocket bridge 投递到：
 
 ```text
-/api/customchat/deliver
+ws://127.0.0.1:3001/api/customchat/socket
 ```
 
 门户收到后写入本地消息并通过 SSE 推回页面。

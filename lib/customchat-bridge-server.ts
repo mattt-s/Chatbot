@@ -35,18 +35,19 @@ declare global {
   var __chatbotCustomChatBridgeServerStarted: Promise<void> | undefined;
 }
 
+const CUSTOMCHAT_BRIDGE_HOST = "127.0.0.1";
+const CUSTOMCHAT_BRIDGE_PATH = "/api/customchat/socket";
+
 /**
  * 读取 Bridge 服务的监听配置（host、port、path）
  * @returns {{ host: string; port: number; path: string }} 监听配置
  */
 function getBridgeConfig() {
-  const host = process.env.CUSTOMCHAT_APP_WS_HOST?.trim() || "127.0.0.1";
-  const port = Number.parseInt(process.env.CUSTOMCHAT_APP_WS_PORT?.trim() || "3001", 10);
-  const path = process.env.CUSTOMCHAT_APP_WS_PATH?.trim() || "/api/customchat/socket";
+  const env = getEnv();
   return {
-    host,
-    port: Number.isFinite(port) && port > 0 ? port : 3001,
-    path: path.startsWith("/") ? path : `/${path}`,
+    host: CUSTOMCHAT_BRIDGE_HOST,
+    port: env.customChatBridgePort,
+    path: CUSTOMCHAT_BRIDGE_PATH,
   };
 }
 
@@ -68,13 +69,13 @@ function sendJson(socket: WebSocket, payload: Record<string, unknown>) {
  * @returns {boolean} true 表示鉴权失败
  */
 function isUnauthorized(requestUrl: URL) {
-  const expectedSecret = getEnv().customChatSharedSecret;
-  if (!expectedSecret) {
+  const expectedAuthToken = getEnv().customChatAuthToken;
+  if (!expectedAuthToken) {
     return true;
   }
 
   const token = requestUrl.searchParams.get("token")?.trim() || "";
-  return token !== expectedSecret;
+  return token !== expectedAuthToken;
 }
 
 /**
