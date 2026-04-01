@@ -135,11 +135,6 @@ export function ManageGroupRolesDialog({
                       {role.busyAgeMs != null ? `已持续 ${formatBusyAge(role.busyAgeMs)}` : "正在处理中"}
                     </div>
                   ) : null}
-                  {role.runtimeNote ? (
-                    <div className="mt-0.5 text-[11px] text-[var(--ink-soft)]">
-                      {role.runtimeSource === "verified" ? "核验结果" : "本地状态"}: {role.runtimeNote}
-                    </div>
-                  ) : null}
                 </div>
 
                 {/* 操作按钮 */}

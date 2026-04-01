@@ -497,6 +497,9 @@ export function PanelCard({
     const roles = Array.isArray(payload?.roles) ? payload.roles : null;
     if (roles) {
       setGroupRoles(roles);
+      setManageGroupRolesDialog((prev) =>
+        prev ? { ...prev, roles } : prev,
+      );
       // 同步到父级 panel 的 groupRoles，保留当前 messages 状态避免重置
       onPanelReplaced({
         ...panel,
