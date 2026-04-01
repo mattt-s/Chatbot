@@ -567,7 +567,9 @@ async function runGroupTaskReminderWatchdog(now: number) {
           .map((role) => role.title),
       });
 
-      const isFirstCall = !hasBeenInitialized(panel.id, leader.id);
+      // Reminder 是系统内部催办消息，不应该重复携带首轮群组注入提示；
+      // 即使 app 重启后 initializedRoles 丢失，也始终按非首次消息发送。
+      const isFirstCall = false;
       const dispatchText = buildDispatchMessage({
         targetRole: leader,
         allRoles: groupRoles,
