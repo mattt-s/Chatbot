@@ -140,7 +140,11 @@ function MarkdownMessage({ text }: { text: string }) {
           ),
           p: ({ children }) => <p className="mb-3 whitespace-pre-wrap last:mb-0">{children}</p>,
           ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
-          ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+          ol: ({ children, start }) => (
+            <ol start={start} className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">
+              {children}
+            </ol>
+          ),
           li: ({ children }) => <li className="whitespace-pre-wrap">{children}</li>,
           blockquote: ({ children }) => (
             <blockquote className="mb-3 border-l-4 border-black/10 pl-3 text-[var(--ink-soft)] last:mb-0">
