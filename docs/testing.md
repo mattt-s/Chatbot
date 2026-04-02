@@ -183,11 +183,12 @@ npm run test:coverage
 
 | 函数 | 测试内容 |
 |------|---------|
-| `deleteProviderSession()` | 发送 DELETE 请求、携带 Bearer token、非 ok 响应抛异常 |
-| `abortProviderRun()` | 发送 POST 请求、携带正确 body、失败时抛异常 |
-| 缺少配置 | `providerBaseUrl` 为空时抛异常 |
+| `deleteProviderSession()` | 调用 `session.delete` RPC、参数正确、RPC 失败时抛异常 |
+| `abortProviderRun()` | 调用 `session.abort` RPC、参数正确、失败时抛异常 |
+| `inspectProviderSession()` | 调用 `session.inspect` RPC |
+| `readProviderSessionStatus()` | 调用 `session.status` RPC |
 
-**Mock 策略**：mock 全局 `fetch` + `@/lib/env`。
+**Mock 策略**：mock `@/lib/customchat-bridge-server`（`sendRpcToPlugin` + `ensureCustomChatBridgeServer`）。
 
 ---
 
@@ -198,10 +199,10 @@ npm run test:coverage
 
 | 函数 | 测试内容 |
 |------|---------|
-| `loadAgentCatalog()` | provider 不可用时回退到环境变量 catalog、provider 成功时返回并添加 avatarUrl、过滤无效 agent 条目、catalog JSON 格式错误时回退到默认 |
+| `loadAgentCatalog()` | plugin 不可用时回退到环境变量 catalog、RPC 成功时返回并添加 avatarUrl、过滤无效 agent 条目、catalog JSON 格式错误时回退到默认 |
 | `getChannelView()` | 返回固定的 channel 视图结构 |
 
-**Mock 策略**：mock 全局 `fetch` + `@/lib/env`。
+**Mock 策略**：mock `@/lib/customchat-bridge-server`（`sendRpcToPlugin` + `isPluginConnected` + `ensureCustomChatBridgeServer`）+ `@/lib/env`。
 
 ---
 

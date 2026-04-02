@@ -202,15 +202,13 @@ Docker 更适合下面这些情况：
 - `APP_SESSION_SECRET`
 - `APP_ADMIN_EMAIL`
 - `APP_ADMIN_PASSWORD`
-- `CUSTOMCHAT_PROVIDER_BASE_URL`（可缺省，默认 `http://127.0.0.1:18789`）
 - `CUSTOMCHAT_AUTH_TOKEN`
 - `CUSTOMCHAT_BRIDGE_PORT`（仅当你不用默认 `3001` 时）
 
 其中：
 
 - `APP_BASE_URL` 有合理默认值，通常不需要改
-- `CUSTOMCHAT_PROVIDER_BASE_URL` 默认就是 `http://127.0.0.1:18789`
-- `CUSTOMCHAT_AUTH_TOKEN` 要与 `openclaw.json` 保持一致
+- `CUSTOMCHAT_AUTH_TOKEN` 要与 `openclaw.json` 里的 `channels.customchat.authToken` 保持一致
 - 如果你改了 `CUSTOMCHAT_BRIDGE_PORT`，要把 `openclaw.json` 里的 `channels.customchat.bridgePort` 改成相同值
 - 如果你想看插件详细日志，直接把 `openclaw.json` 里的 `channels.customchat.debug` 设为 `true`
 
