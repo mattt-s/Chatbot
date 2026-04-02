@@ -22,6 +22,28 @@ import {
   normalizeRuntimeStepForDisplay,
 } from "./runtime-helpers";
 
+function normalizeMarkdownText(text: string) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+
+  return lines
+    .map((line) => {
+      const numberedMatch = line.match(/^(\s*)(\d+)[）)]\s+(.+)$/);
+      if (numberedMatch) {
+        const [, indent, order, content] = numberedMatch;
+        return `${indent}${order}. ${content}`;
+      }
+
+      const wrappedNumberedMatch = line.match(/^(\s*)[（(](\d+)[）)]\s+(.+)$/);
+      if (wrappedNumberedMatch) {
+        const [, indent, order, content] = wrappedNumberedMatch;
+        return `${indent}${order}. ${content}`;
+      }
+
+      return line;
+    })
+    .join("\n");
+}
+
 /**
  * 附件预览子组件。
  *
@@ -124,6 +146,8 @@ function AttachmentActionMenu({ attachment }: { attachment: AttachmentView }) {
 }
 
 function MarkdownMessage({ text }: { text: string }) {
+  const normalizedText = normalizeMarkdownText(text);
+
   return (
     <div className="min-w-0 max-w-full text-sm leading-6 text-[var(--ink)] [overflow-wrap:anywhere]">
       <ReactMarkdown
@@ -193,7 +217,7 @@ function MarkdownMessage({ text }: { text: string }) {
           td: ({ children }) => <td className="border border-black/10 px-2 py-1 align-top">{children}</td>,
         }}
       >
-        {text}
+        {normalizedText}
       </ReactMarkdown>
     </div>
   );

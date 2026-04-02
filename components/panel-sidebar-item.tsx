@@ -6,6 +6,7 @@
  */
 "use client";
 
+import type { KeyboardEvent } from "react";
 import Image from "next/image";
 import { getGroupTaskStateClassName, getGroupTaskStateLabel } from "@/lib/group-task";
 import type { AgentView, PanelView } from "@/lib/types";
@@ -127,13 +128,22 @@ export function PanelSidebarItem({
     (panel.title || "A").slice(0, 1)
   );
 
+  function handleSelectKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect();
+    }
+  }
+
   return (
     <div
       className={`relative rounded-[24px] border transition ${cardToneClass}`}
     >
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={handleSelectKeyDown}
         className="w-full rounded-[24px] px-3 py-3 pr-12 text-left"
       >
         <div className="flex items-start gap-3">
@@ -191,7 +201,7 @@ export function PanelSidebarItem({
             </p>
           </div>
         </div>
-      </button>
+      </div>
 
       <button
         type="button"
