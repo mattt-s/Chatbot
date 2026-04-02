@@ -994,6 +994,7 @@ async function resolveDefaultAccountConfig(): Promise<AccountConfig> {
   return normalizeAccountConfig({}, "default");
 }
 
+
 /**
  * 解析 Gateway WebSocket URL（插件订阅 Gateway 事件流用）。
  * 优先级：CUSTOMCHAT_GATEWAY_WS_URL > OPENCLAW_GATEWAY_URL > 默认 ws://127.0.0.1:18789。
@@ -3081,24 +3082,15 @@ export function buildCustomChatPlugin() {
         };
       },
       async sendText(input: unknown, ctx: ChannelContext | undefined) {
-        const accountConfig = normalizeAccountConfig(
-          ctx?.channelConfig || ctx?.config?.channels?.customchat || {},
-          ctx?.accountId || "default",
-        );
+        const accountConfig = await resolveDefaultAccountConfig();
         return deliverMessage(input, accountConfig);
       },
       async sendMedia(input: unknown, ctx: ChannelContext | undefined) {
-        const accountConfig = normalizeAccountConfig(
-          ctx?.channelConfig || ctx?.config?.channels?.customchat || {},
-          ctx?.accountId || "default",
-        );
+        const accountConfig = await resolveDefaultAccountConfig();
         return deliverMessage(input, accountConfig);
       },
       async sendMessage(input: unknown, ctx: ChannelContext | undefined) {
-        const accountConfig = normalizeAccountConfig(
-          ctx?.channelConfig || ctx?.config?.channels?.customchat || {},
-          ctx?.accountId || "default",
-        );
+        const accountConfig = await resolveDefaultAccountConfig();
         return deliverMessage(input, accountConfig);
       },
     },
