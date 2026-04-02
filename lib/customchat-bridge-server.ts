@@ -2,10 +2,14 @@
  * customchat WebSocket Bridge 服务端
  *
  * 在 App 侧启动 WebSocket 服务，接受来自 customchat 插件的连接。
- * 插件通过此桥接通道投递消息（deliver），App 解析后调用 ingest 流程处理。
- * 支持心跳检测、token 鉴权、hello/ping/deliver 协议。
+ * 双向通信：
+ * - Plugin → App：deliver（消息投递）
+ * - App → Plugin：inbound（用户消息发送）
+ * 支持心跳检测、token 鉴权、hello/ping/deliver/inbound 协议。
  */
 import "server-only";
+
+import crypto from "node:crypto";
 
 import type { WebSocket, WebSocketServer } from "ws";
 
@@ -29,6 +33,13 @@ type BridgeEnvelope =
       type: "deliver";
       requestId: string;
       payload: unknown;
+    }
+  | {
+      type: "ack";
+      requestId: string;
+      ok: boolean;
+      result?: unknown;
+      error?: string;
     };
 
 declare global {
@@ -37,6 +48,21 @@ declare global {
 
 const CUSTOMCHAT_BRIDGE_HOST = "127.0.0.1";
 const CUSTOMCHAT_BRIDGE_PATH = "/api/customchat/socket";
+const INBOUND_ACK_TIMEOUT_MS = 30_000;
+
+// ── Plugin socket tracking ──────────────────────────────────────────
+
+let pluginSocket: WebSocket | null = null;
+
+type PendingAck = {
+  resolve: (value: { runId: string; status: string }) => void;
+  reject: (reason: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+const pendingAcks = new Map<string, PendingAck>();
+
+// ── Helpers ─────────────────────────────────────────────────────────
 
 /**
  * 读取 Bridge 服务的监听配置（host、port、path）
@@ -111,7 +137,21 @@ function startHeartbeat(server: WebSocketServer) {
 }
 
 /**
- * 处理收到的桥接协议信封：hello（握手）、ping（保活）、deliver（消息投递）
+ * 清理 plugin socket 引用及所有 pending ack
+ */
+function clearPluginSocket() {
+  pluginSocket = null;
+  for (const [requestId, pending] of pendingAcks) {
+    clearTimeout(pending.timer);
+    pending.reject(new Error("Plugin WebSocket disconnected."));
+    pendingAcks.delete(requestId);
+  }
+}
+
+// ── Envelope handler ────────────────────────────────────────────────
+
+/**
+ * 处理收到的桥接协议信封：hello（握手）、ping（保活）、deliver（消息投递）、ack（inbound 回复）
  * @param {WebSocket} socket - 来源连接
  * @param {BridgeEnvelope} envelope - 解析后的协议信封
  */
@@ -133,35 +173,56 @@ async function handleEnvelope(socket: WebSocket, envelope: BridgeEnvelope) {
     return;
   }
 
-  if (envelope.type !== "deliver") {
-    log.debug("handleEnvelope", { type: (envelope as { type: string }).type, result: "unsupported" });
-    sendJson(socket, {
-      type: "error",
-      error: "Unsupported bridge message.",
-    });
+  if (envelope.type === "ack") {
+    const pending = pendingAcks.get(envelope.requestId);
+    if (!pending) {
+      return;
+    }
+    pendingAcks.delete(envelope.requestId);
+    clearTimeout(pending.timer);
+    if (envelope.ok) {
+      const result = envelope.result as Record<string, unknown> | undefined;
+      pending.resolve({
+        runId: (typeof result?.runId === "string" && result.runId.trim()) || "",
+        status: (typeof result?.status === "string" && result.status.trim()) || "started",
+      });
+    } else {
+      pending.reject(new Error(envelope.error || "Plugin rejected inbound message."));
+    }
     return;
   }
 
-  try {
-    log.input("handleEnvelope", { type: "deliver", requestId: envelope.requestId });
-    const result = await ingestCustomChatDelivery(envelope.payload);
-    log.output("handleEnvelope", { requestId: envelope.requestId, ok: "true" });
-    sendJson(socket, {
-      type: "ack",
-      requestId: envelope.requestId,
-      ok: true,
-      result,
-    });
-  } catch (error) {
-    log.error("handleEnvelope", error, { requestId: envelope.requestId });
-    sendJson(socket, {
-      type: "ack",
-      requestId: envelope.requestId,
-      ok: false,
-      error: error instanceof Error ? error.message : "Bridge delivery failed.",
-    });
+  if (envelope.type === "deliver") {
+    try {
+      log.input("handleEnvelope", { type: "deliver", requestId: envelope.requestId });
+      const result = await ingestCustomChatDelivery(envelope.payload);
+      log.output("handleEnvelope", { requestId: envelope.requestId, ok: "true" });
+      sendJson(socket, {
+        type: "ack",
+        requestId: envelope.requestId,
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      log.error("handleEnvelope", error, { requestId: envelope.requestId });
+      sendJson(socket, {
+        type: "ack",
+        requestId: envelope.requestId,
+        ok: false,
+        error: error instanceof Error ? error.message : "Bridge delivery failed.",
+      });
+    }
+    return;
   }
+
+  log.debug("handleEnvelope", { type: (envelope as { type: string }).type, result: "unsupported" });
+  sendJson(socket, {
+    type: "error",
+    error: "Unsupported bridge message.",
+  });
 }
+
+// ── Server startup ──────────────────────────────────────────────────
 
 /**
  * 启动 WebSocket Bridge 服务，监听配置端口并处理插件连接
@@ -193,6 +254,19 @@ async function startCustomChatBridgeServer() {
 
     log.debug("connection", { result: "accepted" });
     bindSocketLifecycle(socket);
+
+    // 追踪 plugin socket（新连接取代旧连接）
+    if (pluginSocket && pluginSocket !== socket) {
+      clearPluginSocket();
+    }
+    pluginSocket = socket;
+
+    socket.on("close", () => {
+      if (pluginSocket === socket) {
+        clearPluginSocket();
+      }
+    });
+
     sendJson(socket, {
       type: "hello",
       role: "app",
@@ -249,4 +323,59 @@ export function ensureCustomChatBridgeServer() {
   }
 
   return globalThis.__chatbotCustomChatBridgeServerStarted;
+}
+
+// ── Public API: App → Plugin inbound ────────────────────────────────
+
+export type InboundPayload = {
+  panelId?: string;
+  agentId?: string;
+  target: string;
+  messageId: string;
+  text: string;
+  attachments?: unknown[];
+};
+
+/**
+ * 通过 WebSocket 向 Plugin 发送 inbound 用户消息
+ * @throws {Error} Plugin 未连接或 ack 超时
+ */
+export async function sendInboundToPlugin(
+  payload: InboundPayload,
+): Promise<{ runId: string; status: string }> {
+  await ensureCustomChatBridgeServer();
+
+  if (!pluginSocket || pluginSocket.readyState !== pluginSocket.OPEN) {
+    throw new Error("Plugin WebSocket is not connected.");
+  }
+
+  const requestId = `inbound:${crypto.randomUUID()}`;
+
+  return new Promise<{ runId: string; status: string }>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingAcks.delete(requestId);
+      reject(new Error("Plugin inbound ack timed out."));
+    }, INBOUND_ACK_TIMEOUT_MS);
+
+    pendingAcks.set(requestId, { resolve, reject, timer });
+
+    log.input("sendInboundToPlugin", {
+      requestId,
+      target: payload.target,
+      messageId: payload.messageId,
+    });
+
+    sendJson(pluginSocket!, {
+      type: "inbound",
+      requestId,
+      payload,
+    });
+  });
+}
+
+/**
+ * 检查 Plugin WebSocket 是否已连接
+ */
+export function isPluginConnected(): boolean {
+  return pluginSocket !== null && pluginSocket.readyState === pluginSocket.OPEN;
 }

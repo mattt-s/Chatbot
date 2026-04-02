@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 
 import { abortProviderRun, inspectProviderSession } from "@/lib/customchat-provider";
 import { readEffectiveAppSettingsSync } from "@/lib/app-settings";
-import { getEnv } from "@/lib/env";
+import { ensureCustomChatBridgeServer, sendInboundToPlugin } from "@/lib/customchat-bridge-server";
 import { buildLeaderProgressReminder, GROUP_TASK_REMINDER_AFTER_MS } from "@/lib/group-task";
 import { createLogger } from "@/lib/logger";
 import {
@@ -54,7 +54,6 @@ interface BusyRoleState {
 }
 
 const PREQUEUE_VERIFY_AFTER_MS = 15_000;
-const PROVIDER_INGRESS_PATH = "/customchat/inbound";
 
 // ────────────────────────────────────────────
 // In-memory state
@@ -674,19 +673,6 @@ async function releaseRoleAndFlushQueue(
 // Dispatch
 // ────────────────────────────────────────────
 
-/**
- * 构建 Provider 消息入口 URL
- */
-function buildProviderIngressUrl(): string {
-  const env = getEnv();
-  if (!env.providerBaseUrl) {
-    throw new Error("CUSTOMCHAT_PROVIDER_BASE_URL is not configured.");
-  }
-
-  const baseUrl = env.providerBaseUrl.replace(/\/+$/, "");
-  return `${baseUrl}${PROVIDER_INGRESS_PATH}`;
-}
-
 async function dispatchToRole(params: {
   panelId: string;
   groupRoleId: string;
@@ -696,11 +682,6 @@ async function dispatchToRole(params: {
   targetRole: StoredGroupRole;
   isFirstCall: boolean;
 }) {
-  const env = getEnv();
-  if (!env.customChatAuthToken) {
-    throw new Error("CUSTOMCHAT_AUTH_TOKEN is not configured.");
-  }
-
   if (!checkDispatchLimit(params.panelId)) {
     log.error("dispatchToRole", new Error("dispatch rate limit exceeded"), {
       panelId: params.panelId,
@@ -708,6 +689,8 @@ async function dispatchToRole(params: {
     });
     return;
   }
+
+  await ensureCustomChatBridgeServer();
 
   const messageId = crypto.randomUUID();
   const target = toCustomChatGroupRoleTarget(params.panelId, params.groupRoleId);
@@ -721,38 +704,15 @@ async function dispatchToRole(params: {
     isFirstCall: String(params.isFirstCall),
   });
 
-  const response = await fetch(buildProviderIngressUrl(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.customChatAuthToken}`,
-    },
-    body: JSON.stringify({
-      panelId: params.panelId,
-      agentId: params.agentId,
-      target,
-      messageId,
-      text: params.text,
-    }),
-    cache: "no-store",
+  const result = await sendInboundToPlugin({
+    panelId: params.panelId,
+    agentId: params.agentId,
+    target,
+    messageId,
+    text: params.text,
   });
 
-  const payload = (await response.json().catch(() => null)) as {
-    runId?: string;
-    status?: string;
-    error?: string;
-  } | null;
-
-  if (!response.ok) {
-    log.error("dispatchToRole", new Error(payload?.error ?? "dispatch failed"), {
-      panelId: params.panelId,
-      groupRoleId: params.groupRoleId,
-      status: String(response.status),
-    });
-    throw new Error(payload?.error ?? "group dispatch to provider failed.");
-  }
-
-  const runId = payload?.runId?.trim() || messageId;
+  const runId = result.runId?.trim() || messageId;
 
   // 标记角色为忙
   markRoleBusy(params.panelId, params.groupRoleId, runId, params.agentId);

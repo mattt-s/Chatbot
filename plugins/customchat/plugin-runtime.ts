@@ -1346,6 +1346,8 @@ async function ensurePortalSocket(accountConfig: AccountConfig) {
         settled = true;
         portalSocket = socket;
         startPortalHeartbeat(socket);
+        // 注册持久的 inbound 消息处理器（App → Plugin 方向）
+        socket.addEventListener("message", handlePortalInboundMessage);
         resolve();
       }
     });
@@ -2611,8 +2613,142 @@ async function deliverMessage(input: unknown, accountConfig: AccountConfig) {
 }
 
 /**
+ * 处理 inbound 用户消息的核心逻辑（传输无关）。
+ * 解析载荷 → 物化附件 → 发起 chat.send → 创建 TrackedRun。
+ * 由 HTTP handler 和 WebSocket handler 共用。
+ */
+async function processInboundPayload(parsed: InboundRequestPayload) {
+  const target = normalizeChannelTarget(parsed.target || `channel:${parsed.panelId || ""}`);
+  if (!target) {
+    throw new Error("target is required.");
+  }
+
+  const messageId = parsed.messageId?.trim() || `customchat:${crypto.randomUUID()}`;
+  const attachments = Array.isArray(parsed.attachments) ? parsed.attachments : [];
+  const materialized = await materializeInboundAttachments(
+    target,
+    messageId,
+    attachments,
+  );
+  const existingBinding = await findRouteBinding({
+    target,
+  });
+  const message = buildInboundAgentMessage(
+    target,
+    parsed.text || "",
+    materialized.files,
+    materialized.manifestPath,
+    {
+      includeRoutingHint: shouldInjectRoutingHint({
+        targetAlreadyKnown: Boolean(existingBinding),
+        text: parsed.text || "",
+        attachmentCount: attachments.length,
+      }),
+    },
+  );
+  const agentId = parsed.agentId?.trim() || "main";
+  const launched = await launchChatTurn({
+    agentId,
+    target,
+    message,
+    messageId,
+  });
+  await rememberRouteBinding({
+    target,
+    agentId,
+    runId: launched.runId,
+    messageId,
+    sessionKey: launched.sessionKey,
+    expectedSessionKey: launched.expectedSessionKey,
+  });
+  getOrCreateTrackedRun({
+    runId: launched.runId,
+    agentId,
+    target,
+    sessionKey: launched.sessionKey,
+    expectedSessionKey: launched.expectedSessionKey,
+  });
+  ensureGatewaySubscriber();
+  void recoverTrackedRuns().catch((error) => {
+    console.error("[customchat] tracked run recovery failed", error);
+  });
+
+  return {
+    ok: true,
+    status: launched.status,
+    runId: launched.runId,
+    target,
+    sessionKey: launched.sessionKey,
+    fileCount: materialized.files.length,
+    manifestPath: materialized.manifestPath,
+  };
+}
+
+/**
+ * 持久 WebSocket 消息处理器：处理 App 发来的 inbound 消息。
+ * 注册在 portal socket 上，与 sendPortalEnvelope 的 per-request ack 监听共存。
+ */
+function handlePortalInboundMessage(event: MessageEvent) {
+  const raw =
+    typeof event.data === "string"
+      ? event.data
+      : Buffer.isBuffer(event.data)
+        ? event.data.toString("utf8")
+        : String(event.data);
+  let frame: JsonRecord;
+  try {
+    frame = JSON.parse(raw) as JsonRecord;
+  } catch {
+    return;
+  }
+
+  if (typeof frame.type !== "string" || frame.type !== "inbound") {
+    return; // 非 inbound 消息，交给其他 handler 处理
+  }
+
+  const requestId = typeof frame.requestId === "string" ? frame.requestId : "";
+  const payload = frame.payload as InboundRequestPayload | undefined;
+
+  void (async () => {
+    try {
+      if (!payload) {
+        throw new Error("Invalid inbound payload.");
+      }
+      pluginLog("inbound", "handlePortalInboundMessage", "← received", {
+        requestId,
+        target: payload.target || "",
+        messageId: payload.messageId || "",
+      });
+      const result = await processInboundPayload(payload);
+      if (portalSocket && portalSocket.readyState === portalSocket.OPEN) {
+        portalSocket.send(
+          JSON.stringify({
+            type: "ack",
+            requestId,
+            ok: true,
+            result,
+          }),
+        );
+      }
+    } catch (error) {
+      console.error("[customchat] inbound WS handler error", error);
+      if (portalSocket && portalSocket.readyState === portalSocket.OPEN) {
+        portalSocket.send(
+          JSON.stringify({
+            type: "ack",
+            requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : "customchat inbound failed.",
+          }),
+        );
+      }
+    }
+  })();
+}
+
+/**
  * 处理前端入站 HTTP 请求（POST /customchat/inbound）。
- * 验证 Bearer Token → 解析载荷 → 物化附件 → 发起 chat.send → 创建 TrackedRun。
+ * 验证 Bearer Token → 委托 processInboundPayload 处理。
  * GET 请求返回频道状态信息。
  * @param req - HTTP 请求
  * @param res - HTTP 响应
@@ -2647,71 +2783,8 @@ async function handleInboundRequest(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
-    const target = normalizeChannelTarget(parsed.target || `channel:${parsed.panelId || ""}`);
-    if (!target) {
-      writeJson(res, 400, { error: "target is required." });
-      return;
-    }
-
-    const messageId = parsed.messageId?.trim() || `customchat:${crypto.randomUUID()}`;
-    const attachments = Array.isArray(parsed.attachments) ? parsed.attachments : [];
-    const materialized = await materializeInboundAttachments(
-      target,
-      messageId,
-      attachments,
-    );
-    const existingBinding = await findRouteBinding({
-      target,
-    });
-    const message = buildInboundAgentMessage(
-      target,
-      parsed.text || "",
-      materialized.files,
-      materialized.manifestPath,
-      {
-        includeRoutingHint: shouldInjectRoutingHint({
-          targetAlreadyKnown: Boolean(existingBinding),
-          text: parsed.text || "",
-          attachmentCount: attachments.length,
-        }),
-      },
-    );
-    const agentId = parsed.agentId?.trim() || "main";
-    const launched = await launchChatTurn({
-      agentId,
-      target,
-      message,
-      messageId,
-    });
-    await rememberRouteBinding({
-      target,
-      agentId,
-      runId: launched.runId,
-      messageId,
-      sessionKey: launched.sessionKey,
-      expectedSessionKey: launched.expectedSessionKey,
-    });
-    getOrCreateTrackedRun({
-      runId: launched.runId,
-      agentId,
-      target,
-      sessionKey: launched.sessionKey,
-      expectedSessionKey: launched.expectedSessionKey,
-    });
-    ensureGatewaySubscriber();
-    void recoverTrackedRuns().catch((error) => {
-      console.error("[customchat] tracked run recovery failed", error);
-    });
-
-    writeJson(res, 200, {
-      ok: true,
-      status: launched.status,
-      runId: launched.runId,
-      target,
-      sessionKey: launched.sessionKey,
-      fileCount: materialized.files.length,
-      manifestPath: materialized.manifestPath,
-    });
+    const result = await processInboundPayload(parsed);
+    writeJson(res, 200, result);
   } catch (error) {
     writeJson(res, 500, {
       error: error instanceof Error ? error.message : "customchat inbound failed.",

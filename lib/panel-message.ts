@@ -9,7 +9,7 @@ import "server-only";
 import crypto from "node:crypto";
 
 import { buildAudioAwareInstruction } from "@/lib/audio-instruction";
-import { getEnv } from "@/lib/env";
+import { ensureCustomChatBridgeServer, sendInboundToPlugin } from "@/lib/customchat-bridge-server";
 import { createLogger } from "@/lib/logger";
 import { appendUserMessage, persistUploadedFile, setPanelActiveRun } from "@/lib/store";
 import type { MessageView, SessionUser, StoredAttachment, StoredPanel } from "@/lib/types";
@@ -45,15 +45,6 @@ type InboundAttachmentInput = {
   content: string;
   size: number;
 };
-
-type ProviderIngressPayload = {
-  runId?: string;
-  status?: string;
-  sessionKey?: string;
-  error?: string;
-};
-
-const PROVIDER_INGRESS_PATH = "/customchat/inbound";
 
 /**
  * 判断文件是否为类文本文件（可提取文本内容）
@@ -105,29 +96,15 @@ async function prepareUploads(userId: string, files: File[]) {
   return uploads;
 }
 
-/**
- * 构建 Provider 消息入口 URL
- * @returns {string} 完整的入口 URL
- * @throws {Error} 未配置 CUSTOMCHAT_PROVIDER_BASE_URL 时抛出
- */
-function buildProviderIngressUrl() {
-  const env = getEnv();
-  if (!env.providerBaseUrl) {
-    throw new Error("CUSTOMCHAT_PROVIDER_BASE_URL is not configured.");
-  }
-
-  const baseUrl = env.providerBaseUrl.replace(/\/+$/, "");
-  return `${baseUrl}${PROVIDER_INGRESS_PATH}`;
-}
 
 /**
- * 通过 Provider HTTP 接口将用户消息投递给 Gateway
+ * 通过 WebSocket Bridge 将用户消息投递给 Plugin/Gateway
  * @param {StoredPanel} panel - 目标面板
  * @param {string} messageId - 消息唯一 ID
  * @param {string} message - 用户消息文本
  * @param {PreparedUpload[]} uploads - 已处理的附件列表
  * @returns {Promise<{ runId: string; status: string }>} Gateway 返回的 runId 和状态
- * @throws {Error} Provider 请求失败时抛出
+ * @throws {Error} 投递失败时抛出
  */
 async function dispatchViaProvider(
   panel: StoredPanel,
@@ -135,10 +112,7 @@ async function dispatchViaProvider(
   message: string,
   uploads: PreparedUpload[],
 ) {
-  const env = getEnv();
-  if (!env.customChatAuthToken) {
-    throw new Error("CUSTOMCHAT_AUTH_TOKEN is not configured.");
-  }
+  await ensureCustomChatBridgeServer();
 
   const attachments: InboundAttachmentInput[] = uploads.map((upload) => ({
     name: upload.name,
@@ -147,35 +121,14 @@ async function dispatchViaProvider(
     size: upload.bytes.byteLength,
   }));
 
-  const response = await fetch(buildProviderIngressUrl(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.customChatAuthToken}`,
-    },
-    body: JSON.stringify({
-      panelId: panel.id,
-      agentId: panel.agentId,
-      target: `direct:${panel.id}`,
-      messageId,
-      text: message,
-      attachments,
-    }),
-    cache: "no-store",
+  return sendInboundToPlugin({
+    panelId: panel.id,
+    agentId: panel.agentId,
+    target: `direct:${panel.id}`,
+    messageId,
+    text: message,
+    attachments,
   });
-
-  const payload = (await response.json().catch(() => null)) as
-    | ProviderIngressPayload
-    | null;
-
-  if (!response.ok) {
-    throw new Error(payload?.error ?? "custom channel provider request failed.");
-  }
-
-  return {
-    runId: payload?.runId?.trim() || messageId,
-    status: payload?.status?.trim() || "started",
-  };
 }
 
 /**
