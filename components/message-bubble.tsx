@@ -25,13 +25,13 @@ import {
 function normalizeMarkdownText(text: string) {
   const rawLines = text.replace(/\r\n?/g, "\n").split("\n");
   const normalizedLines = rawLines.map((line) => {
-    const numberedMatch = line.match(/^(\s*)(\d+)[）)]\s+(.+)$/);
+    const numberedMatch = line.match(/^(\s*)(\d+)[）)][\s\u3000]*(.+)$/);
     if (numberedMatch) {
       const [, indent, order, content] = numberedMatch;
       return `${indent}${order}. ${content}`;
     }
 
-    const wrappedNumberedMatch = line.match(/^(\s*)[（(](\d+)[）)]\s+(.+)$/);
+    const wrappedNumberedMatch = line.match(/^(\s*)[（(](\d+)[）)][\s\u3000]*(.+)$/);
     if (wrappedNumberedMatch) {
       const [, indent, order, content] = wrappedNumberedMatch;
       return `${indent}${order}. ${content}`;
@@ -57,9 +57,6 @@ function normalizeMarkdownText(text: string) {
         const previous = result[result.length - 1] ?? "";
         if (!inOrderedList) {
           result[result.length - 1] = previous.replace(/[ \t]{2,}$/, "");
-          if (previous.trim() !== "") {
-            result.push("");
-          }
         }
       }
 
@@ -69,8 +66,17 @@ function normalizeMarkdownText(text: string) {
     }
 
     if (trimmed === "") {
+      const nextNonEmpty = normalizedLines.slice(index + 1).find((candidate) => candidate.trim() !== "");
+      if (
+        nextNonEmpty &&
+        isOrderedItem(nextNonEmpty) &&
+        result.length > 0 &&
+        result[result.length - 1]?.trim() !== ""
+      ) {
+        continue;
+      }
+
       if (inOrderedList) {
-        const nextNonEmpty = normalizedLines.slice(index + 1).find((candidate) => candidate.trim() !== "");
         if (nextNonEmpty && isOrderedItem(nextNonEmpty)) {
           continue;
         }
@@ -217,14 +223,14 @@ function MarkdownMessage({ text }: { text: string }) {
             <h3 className="mb-2 text-lg font-semibold leading-7 text-[var(--ink)]">{children}</h3>
           ),
           p: ({ children }) => <p className="mb-3 whitespace-pre-wrap last:mb-0">{children}</p>,
-          ul: ({ children }) => <ul className="mb-3 list-disc pl-5 last:mb-0 [&_ul]:mb-0 [&_ol]:mb-0">{children}</ul>,
+          ul: ({ children }) => <ul className="mb-1.5 list-disc pl-5 last:mb-0 [&_ul]:mb-0 [&_ol]:mb-0">{children}</ul>,
           ol: ({ children, start }) => (
-            <ol start={start} className="mb-3 list-decimal pl-5 last:mb-0 [&_ul]:mb-0 [&_ol]:mb-0">
+            <ol start={start} className="mb-1.5 list-decimal pl-5 last:mb-0 [&_ul]:mb-0 [&_ol]:mb-0">
               {children}
             </ol>
           ),
           li: ({ children }) => (
-            <li className="mb-1 [&>p]:mb-0 [&>ul]:mt-1 [&>ol]:mt-1">
+            <li className="mb-0.5 last:mb-0 [&>p]:mb-0 [&>ul]:mt-1 [&>ol]:mt-1">
               {children}
             </li>
           ),
