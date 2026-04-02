@@ -156,8 +156,8 @@ flowchart TD
 |---|---|---|---|
 | 网页 -> app | 浏览器 -> Next.js | HTTP | 发送用户消息、登录、读取页面数据 |
 | app -> 网页 | Next.js -> 浏览器 | SSE | 推送消息增量、终态、runtime steps |
-| app -> 插件 | app -> `customchat` ingress | HTTP | 把用户消息送进 OpenClaw channel |
-| 插件 -> app | `customchat` -> app bridge | WebSocket | 推送 `delta / final / attachments / runtimeSteps` |
+| app -> 插件 | app -> `customchat` | WebSocket (`inbound` / `rpc`) | 发用户消息、管理类 API（session / agents / avatar） |
+| 插件 -> app | `customchat` -> app bridge | WebSocket (`deliver` / `ack`) | 推送 `delta / final / attachments / runtimeSteps` |
 | 插件 -> Gateway | `customchat` -> Gateway | RPC + WebSocket | `chat.send / chat.abort`，以及实时订阅 `chat/agent` 事件 |
 | Gateway -> 插件 | Gateway -> `customchat` | WebSocket | 推送 session / run / tool / assistant 事件 |
 
@@ -167,7 +167,7 @@ flowchart TD
 
 - 浏览器调用 app 的 `POST /api/customchat/webhook`
 - app 先本地写入 user message
-- app 再把这条消息 `POST` 到 OpenClaw 插件 ingress：`/customchat/inbound`
+- app 通过 WebSocket bridge 向插件发送 `{type: "inbound", ...}` 帧
 
 ### 2. 插件启动 run
 
@@ -944,7 +944,7 @@ flowchart TD
     A["Browser"] --> B["App Webhook<br/>(FormData multipart)"]
     B --> C["落盘到 storage/uploads/{uuid}"]
     C --> D["Base64 编码"]
-    D --> E["POST /customchat/inbound"]
+    D --> E["WS inbound 帧 → Plugin"]
     E --> F["Plugin 解码"]
     F --> G["落盘到 ~/.openclaw/channels/customchat/{target}/{msgId}/"]
     G --> H["拼接文件路径到消息文本"]
@@ -968,7 +968,7 @@ flowchart TD
 **③ App → Plugin（`lib/panel-message.ts` → `dispatchViaProvider`）**
 
 - 文件内容 Base64 编码后放入 JSON payload
-- POST 到 `/customchat/inbound`，字段：`{name, mimeType, content: "base64...", size}`
+- 通过 WebSocket bridge 发送 `{type: "inbound", payload: {attachments: [{name, mimeType, content: "base64...", size}], ...}}`
 
 **④ Plugin 落盘（`materializeInboundAttachments`）**
 
