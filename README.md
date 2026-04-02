@@ -62,8 +62,8 @@ flowchart TD
     H["角色回流 final/error/aborted"] --> I{"runId 是否匹配当前 active run?"}
     I -->|匹配| J["释放 busy, 切回 idle"]
     J --> K{"leader final 是否带状态标记?"}
-    K -->|[TASK_IN_PROGRESS]| L["群状态切到 in_progress"]
-    K -->|[TASK_COMPLETED]| M["群状态切到 completed"]
+    K -->|"[TASK_IN_PROGRESS]"| L["群状态切到 in_progress"]
+    K -->|"[TASK_COMPLETED]"| M["群状态切到 completed"]
     K -->|无标记| N["群状态保持不变"]
     L --> O["刷该角色等待队列"]
     M --> O
@@ -72,7 +72,7 @@ flowchart TD
 
     Q["群里所有角色 idle 且任务仍 in_progress"] --> R{"距离最后一条群消息是否 >= 3 分钟?"}
     R -->|是| S["系统提醒 leader 催促其他成员汇报进度"]
-    S --> T["leader 汇总后继续分派, 或输出 [TASK_IN_PROGRESS] / [TASK_COMPLETED]"]
+    S --> T["leader 汇总后继续分派, 或输出 TASK_IN_PROGRESS / TASK_COMPLETED"]
 ```
 
 ### 群组超时恢复机制
