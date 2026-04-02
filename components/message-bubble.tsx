@@ -23,25 +23,79 @@ import {
 } from "./runtime-helpers";
 
 function normalizeMarkdownText(text: string) {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const rawLines = text.replace(/\r\n?/g, "\n").split("\n");
+  const normalizedLines = rawLines.map((line) => {
+    const numberedMatch = line.match(/^(\s*)(\d+)[）)]\s+(.+)$/);
+    if (numberedMatch) {
+      const [, indent, order, content] = numberedMatch;
+      return `${indent}${order}. ${content}`;
+    }
 
-  return lines
-    .map((line) => {
-      const numberedMatch = line.match(/^(\s*)(\d+)[）)]\s+(.+)$/);
-      if (numberedMatch) {
-        const [, indent, order, content] = numberedMatch;
-        return `${indent}${order}. ${content}`;
+    const wrappedNumberedMatch = line.match(/^(\s*)[（(](\d+)[）)]\s+(.+)$/);
+    if (wrappedNumberedMatch) {
+      const [, indent, order, content] = wrappedNumberedMatch;
+      return `${indent}${order}. ${content}`;
+    }
+
+    return line;
+  });
+
+  const result: string[] = [];
+  let inOrderedList = false;
+
+  function isOrderedItem(line: string) {
+    return /^\s*\d+\.\s+/.test(line);
+  }
+
+  for (let index = 0; index < normalizedLines.length; index += 1) {
+    const line = normalizedLines[index];
+    const trimmed = line.trim();
+    const orderedItem = isOrderedItem(line);
+
+    if (orderedItem) {
+      if (result.length > 0) {
+        const previous = result[result.length - 1] ?? "";
+        if (!inOrderedList) {
+          result[result.length - 1] = previous.replace(/[ \t]{2,}$/, "");
+          if (previous.trim() !== "") {
+            result.push("");
+          }
+        }
       }
 
-      const wrappedNumberedMatch = line.match(/^(\s*)[（(](\d+)[）)]\s+(.+)$/);
-      if (wrappedNumberedMatch) {
-        const [, indent, order, content] = wrappedNumberedMatch;
-        return `${indent}${order}. ${content}`;
+      result.push(line.replace(/[ \t]{2,}$/, ""));
+      inOrderedList = true;
+      continue;
+    }
+
+    if (trimmed === "") {
+      if (inOrderedList) {
+        const nextNonEmpty = normalizedLines.slice(index + 1).find((candidate) => candidate.trim() !== "");
+        if (nextNonEmpty && isOrderedItem(nextNonEmpty)) {
+          continue;
+        }
       }
 
-      return line;
-    })
-    .join("\n");
+      if (result[result.length - 1] !== "") {
+        result.push("");
+      }
+      inOrderedList = false;
+      continue;
+    }
+
+    if (inOrderedList) {
+      result.push("");
+      inOrderedList = false;
+    }
+
+    result.push(line);
+  }
+
+  while (result.length > 0 && result[result.length - 1] === "") {
+    result.pop();
+  }
+
+  return result.join("\n");
 }
 
 /**
