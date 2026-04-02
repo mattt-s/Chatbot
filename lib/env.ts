@@ -43,7 +43,7 @@ function parseInteger(value: string | undefined, fallback: number) {
  * 读取并返回所有应用环境变量配置。
  * 未设置的变量会使用合理的默认值。
  *
- * @returns {{ appBaseUrl: string, cookieSecure: boolean, sessionSecret: string, adminEmail: string, adminPassword: string, adminName: string, agentCatalogJson: string, providerBaseUrl: string, customChatAuthToken: string, customChatBridgePort: number, groupRoleWatchdogIntervalMs: number, groupRoleBusyInspectAfterMs: number, groupRoleBusyAbortAfterMs: number }} 环境变量配置对象
+ * @returns {{ appBaseUrl: string, cookieSecure: boolean, sessionSecret: string, adminEmail: string, adminPassword: string, adminName: string, agentCatalogJson: string, customChatAuthToken: string, customChatBridgePort: number, groupRoleWatchdogIntervalMs: number, groupRoleBusyInspectAfterMs: number, groupRoleBusyAbortAfterMs: number }} 环境变量配置对象
  */
 export function getEnv() {
   const appBaseUrl = process.env.APP_BASE_URL ?? "http://127.0.0.1:3000";
@@ -59,7 +59,6 @@ export function getEnv() {
     adminPassword: process.env.APP_ADMIN_PASSWORD ?? "ChangeMe123!",
     adminName: process.env.APP_ADMIN_NAME ?? "Channel Admin",
     agentCatalogJson: process.env.APP_AGENT_CATALOG?.trim() || "",
-    providerBaseUrl: process.env.CUSTOMCHAT_PROVIDER_BASE_URL?.trim() || "",
     customChatAuthToken: process.env.CUSTOMCHAT_AUTH_TOKEN?.trim() || "",
     customChatBridgePort: parseInteger(
       process.env.CUSTOMCHAT_BRIDGE_PORT,

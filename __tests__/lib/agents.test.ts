@@ -6,15 +6,30 @@ vi.mock("server-only", () => ({}));
 // Mock env
 vi.mock("@/lib/env", () => ({
   getEnv: () => ({
-    providerBaseUrl: "http://127.0.0.1:18789",
     customChatAuthToken: "test-token",
     agentCatalogJson: '[{"id":"main","name":"Main"},{"id":"coding","name":"Coding","emoji":"🧑‍💻"}]',
   }),
 }));
 
-// Mock global fetch
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
+// Mock logger
+vi.mock("@/lib/logger", () => ({
+  createLogger: () => ({
+    input: vi.fn(),
+    output: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+// Mock bridge server
+const mockSendRpcToPlugin = vi.fn();
+const mockIsPluginConnected = vi.fn();
+const mockEnsureCustomChatBridgeServer = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/lib/customchat-bridge-server", () => ({
+  sendRpcToPlugin: (...args: unknown[]) => mockSendRpcToPlugin(...args),
+  isPluginConnected: () => mockIsPluginConnected(),
+  ensureCustomChatBridgeServer: () => mockEnsureCustomChatBridgeServer(),
+}));
 
 describe("agents", () => {
   beforeEach(() => {
@@ -23,8 +38,8 @@ describe("agents", () => {
   });
 
   describe("loadAgentCatalog", () => {
-    it("falls back to env catalog when provider unavailable", async () => {
-      mockFetch.mockRejectedValue(new Error("network error"));
+    it("falls back to env catalog when plugin unavailable", async () => {
+      mockIsPluginConnected.mockReturnValue(false);
 
       vi.mock("server-only", () => ({}));
       const { loadAgentCatalog } = await import("@/lib/agents");
@@ -36,15 +51,13 @@ describe("agents", () => {
       expect(agents[1].emoji).toBe("🧑‍💻");
     });
 
-    it("returns provider agents when fetch succeeds", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          agents: [
-            { id: "main", name: "Main Agent" },
-            { id: "lucy", name: "Lucy", emoji: "📚", avatarUrl: "http://example.com/lucy.png" },
-          ],
-        }),
+    it("returns provider agents when RPC succeeds", async () => {
+      mockIsPluginConnected.mockReturnValue(true);
+      mockSendRpcToPlugin.mockResolvedValue({
+        agents: [
+          { id: "main", name: "Main Agent" },
+          { id: "lucy", name: "Lucy", emoji: "📚", avatarUrl: "http://example.com/lucy.png" },
+        ],
       });
 
       vi.mock("server-only", () => ({}));
@@ -58,16 +71,14 @@ describe("agents", () => {
     });
 
     it("filters out invalid agent entries", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          agents: [
-            { id: "valid", name: "Valid" },
-            { missing: "name" },
-            null,
-            42,
-          ],
-        }),
+      mockIsPluginConnected.mockReturnValue(true);
+      mockSendRpcToPlugin.mockResolvedValue({
+        agents: [
+          { id: "valid", name: "Valid" },
+          { missing: "name" },
+          null,
+          42,
+        ],
       });
 
       vi.mock("server-only", () => ({}));
@@ -78,11 +89,10 @@ describe("agents", () => {
     });
 
     it("falls back to default when env catalog is malformed", async () => {
-      mockFetch.mockRejectedValue(new Error("fail"));
+      mockIsPluginConnected.mockReturnValue(false);
 
       vi.doMock("@/lib/env", () => ({
         getEnv: () => ({
-          providerBaseUrl: "",
           customChatAuthToken: "",
           agentCatalogJson: "not valid json",
         }),

@@ -22,18 +22,30 @@ npm run test:watch  # 监听模式
 
 一条消息从输入到显示，完整路径是：
 
-1. 浏览器 -> app  
+1. 浏览器 → app
    `POST /api/customchat/webhook`
-2. app -> OpenClaw 插件 ingress  
-   `POST /customchat/inbound`
-3. OpenClaw 插件 -> Gateway  
+2. app → OpenClaw 插件（WS `inbound`）
+   通过 `ws://127.0.0.1:3001/api/customchat/socket` 发送 `{type: "inbound", ...}`
+3. OpenClaw 插件 → Gateway
    `chat.send`
-4. Gateway -> OpenClaw 插件  
+4. Gateway → OpenClaw 插件
    常驻 WebSocket 推送 `chat` / `agent` 事件
-5. OpenClaw 插件 -> app  
-   常驻 WebSocket 推送 `delta / final / runtimeSteps / attachments`
-6. app -> 浏览器  
+5. OpenClaw 插件 → app（WS `deliver`）
+   通过同一条 WebSocket 推送 `delta / final / runtimeSteps / attachments`
+6. app → 浏览器
    `SSE /api/panels/:panelId/stream`
+
+### App ↔ Plugin 通信
+
+**所有通信走同一条 WebSocket 连接**（`ws://127.0.0.1:3001/api/customchat/socket`），无 HTTP 依赖：
+
+| 方向 | 消息类型 | 用途 |
+|---|---|---|
+| Plugin → App | `deliver` | 投递 Gateway 事件（delta/final/runtimeSteps/attachments） |
+| App → Plugin | `inbound` | 用户发送消息（含附件 base64） |
+| App → Plugin | `rpc` | 管理类 API（agents.list / session.delete / session.inspect / session.status / session.abort / agent.avatar） |
+| 双向 | `ack` | 请求确认（通过 requestId 关联） |
+| 双向 | `hello` / `ping` / `pong` | 握手与心跳 |
 
 ## 群组功能
 
@@ -264,7 +276,7 @@ flowchart TD
 以下值是成对使用的，必须一致：
 
 - `CUSTOMCHAT_AUTH_TOKEN` / `channels.customchat.authToken`
-  customchat 的统一鉴权 token，同时用于 app -> 插件 HTTP 和 插件 -> app bridge
+  customchat 的统一鉴权 token，用于 app ↔ 插件 WebSocket 鉴权
 - `CUSTOMCHAT_BRIDGE_PORT` / `channels.customchat.bridgePort`
   只有你不使用默认 `3001` 时才需要同时配置，而且两边必须一致
 
@@ -279,8 +291,7 @@ app 容器使用这些环境变量。推荐直接写在项目根目录的 `.env`
 | `APP_SESSION_SECRET` | 是 | `replace-with-a-long-random-secret` | 登录态 JWT 签名密钥 |
 | `APP_ADMIN_EMAIL` | 是 | `admin@example.com` | 初始管理员邮箱 |
 | `APP_ADMIN_PASSWORD` | 是 | `ChangeMe123!` | 初始管理员密码 |
-| `CUSTOMCHAT_PROVIDER_BASE_URL` | 否 | `http://127.0.0.1:18789` | app 访问 OpenClaw 插件 ingress 的地址；同机默认部署通常不用改 |
-| `CUSTOMCHAT_AUTH_TOKEN` | 是 | `change-me-customchat-token` | customchat 统一鉴权 token，同时用于 app -> 插件 HTTP 和 插件 -> app bridge |
+| `CUSTOMCHAT_AUTH_TOKEN` | 是 | `change-me-customchat-token` | customchat 统一鉴权 token，用于 app ↔ 插件 WebSocket 鉴权 |
 
 ### 推荐变量
 
@@ -307,7 +318,6 @@ APP_ADMIN_EMAIL=admin@example.com
 APP_ADMIN_PASSWORD=ChangeMe123!
 APP_ADMIN_NAME=Channel Admin
 
-CUSTOMCHAT_PROVIDER_BASE_URL=http://127.0.0.1:18789
 CUSTOMCHAT_AUTH_TOKEN=change-me-customchat-token
 CUSTOMCHAT_BRIDGE_PORT=3001
 
@@ -359,17 +369,17 @@ OpenClaw 的 channel 主配置写在：
 
 这一段最容易混：
 
-### app -> OpenClaw
+### app ↔ OpenClaw
 
 由 app 使用：
 
-- `CUSTOMCHAT_PROVIDER_BASE_URL`
 - `CUSTOMCHAT_AUTH_TOKEN`
+- `CUSTOMCHAT_BRIDGE_PORT`
 
 用途：
 
-- `CUSTOMCHAT_PROVIDER_BASE_URL` 决定 app 去哪里访问 OpenClaw 插件 HTTP 接口
-- `CUSTOMCHAT_AUTH_TOKEN` 用作 app -> 插件 HTTP Bearer 鉴权
+- `CUSTOMCHAT_AUTH_TOKEN` 用作 app ↔ 插件 WebSocket 连接鉴权（插件连接时 `?token=` 参数）
+- `CUSTOMCHAT_BRIDGE_PORT` 决定 app 监听的 WebSocket 端口（默认 3001）
 
 ### OpenClaw -> app
 

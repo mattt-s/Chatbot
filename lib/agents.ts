@@ -1,12 +1,13 @@
 import "server-only";
 
+import { ensureCustomChatBridgeServer, isPluginConnected, sendRpcToPlugin } from "@/lib/customchat-bridge-server";
 import { getEnv } from "@/lib/env";
 import { createLogger } from "@/lib/logger";
 import type { AgentView, ChannelView } from "@/lib/types";
 
 /**
  * Agent 目录加载模块。
- * 支持两种来源：从 Provider（Gateway）远程拉取，或从环境变量 APP_AGENT_CATALOG 本地解析。
+ * 通过 WebSocket RPC 从 Plugin 获取，或从环境变量 APP_AGENT_CATALOG 本地解析。
  * 远程拉取带缓存（5 分钟 TTL），首次 SSR 使用快速超时以避免阻塞。
  */
 
@@ -79,29 +80,17 @@ async function fetchProviderAgents(
     return providerAgentCache.agents;
   }
 
-  const env = getEnv();
-  if (!env.providerBaseUrl || !env.customChatAuthToken) {
+  // Ensure bridge server is running so we can check plugin connection
+  await ensureCustomChatBridgeServer().catch(() => null);
+
+  if (!isPluginConnected()) {
     return null;
   }
 
-  const baseUrl = env.providerBaseUrl.replace(/\/+$/, "");
-  
-  // Internal helper to perform the actual fetch
+  // Internal helper to perform the actual RPC fetch
   const doFetch = async () => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), PROVIDER_AGENT_FETCH_TIMEOUT_MS);
     try {
-      const response = await fetch(`${baseUrl}/customchat/agents`, {
-        headers: {
-          Authorization: `Bearer ${env.customChatAuthToken}`,
-        },
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (!response.ok) return null;
-      const payload = (await response.json().catch(() => null)) as { agents?: unknown } | null;
+      const payload = await sendRpcToPlugin<{ agents?: unknown }>("agents.list");
       if (!payload?.agents || !Array.isArray(payload.agents)) return null;
 
       const agents = payload.agents
@@ -124,7 +113,6 @@ async function fetchProviderAgents(
       });
       return resolved;
     } catch (e) {
-      clearTimeout(timeout);
       log.error("fetchProviderAgents", e);
       return null;
     }
@@ -137,9 +125,7 @@ async function fetchProviderAgents(
       doFetch(),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
     ]);
-    
-    // If we timed out (result is null) and we don't have a cache yet, 
-    // the doFetch() is still running in the background and will fill providerAgentCache eventually.
+
     return result;
   }
 
@@ -147,7 +133,7 @@ async function fetchProviderAgents(
 }
 
 /**
- * 加载 Agent 目录。优先从 Provider 远程获取，失败时回退到本地环境变量配置。
+ * 加载 Agent 目录。优先从 Plugin（via WS RPC）获取，失败时回退到本地环境变量配置。
  *
  * @param {boolean} [forceRefresh=false] - 是否强制刷新缓存（UI 手动触发时为 true）
  * @returns {Promise<AgentView[]>} Agent 列表，至少包含一个默认 Agent
@@ -157,7 +143,7 @@ export async function loadAgentCatalog(forceRefresh = false) {
   // If it's a force refresh (triggered from UI), we can wait longer
   const timeout = forceRefresh ? PROVIDER_AGENT_FETCH_TIMEOUT_MS : PROVIDER_AGENT_FAST_TIMEOUT_MS;
   const providerAgents = await fetchProviderAgents(forceRefresh, timeout);
-  
+
   if (providerAgents?.length) {
     return providerAgents;
   }

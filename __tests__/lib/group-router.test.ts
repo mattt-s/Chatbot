@@ -31,7 +31,6 @@ vi.mock("@/lib/store", () => ({
 // Mock env
 vi.mock("@/lib/env", () => ({
   getEnv: () => ({
-    providerBaseUrl: "http://localhost:18789",
     customChatAuthToken: "test-token",
     groupRoleWatchdogIntervalMs: 30_000,
     groupRoleBusyInspectAfterMs: 300_000,
@@ -56,9 +55,12 @@ vi.mock("@/lib/customchat-provider", () => ({
   abortProviderRun: (...args: unknown[]) => mockAbortProviderRun(...args),
 }));
 
-// Mock global fetch for dispatchToRole
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
+// Mock bridge server
+const mockSendInboundToPlugin = vi.fn();
+vi.mock("@/lib/customchat-bridge-server", () => ({
+  ensureCustomChatBridgeServer: vi.fn().mockResolvedValue(undefined),
+  sendInboundToPlugin: (...args: unknown[]) => mockSendInboundToPlugin(...args),
+}));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,9 +96,9 @@ describe("group-router", () => {
     vi.resetModules();
     mockInspectProviderSession.mockResolvedValue({ exists: true, terminal: false });
     mockAbortProviderRun.mockResolvedValue({ ok: true });
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ runId: `run-${Date.now()}`, status: "ok" }),
+    mockSendInboundToPlugin.mockResolvedValue({
+      runId: `run-${Date.now()}`,
+      status: "ok",
     });
   });
 
@@ -129,9 +131,12 @@ describe("group-router", () => {
       });
 
       // 应该只 dispatch 一次（给分析师）
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(callBody.target).toBe("group:direct:p-grp:role:r-analyst");
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(1);
+      expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: "group:direct:p-grp:role:r-analyst",
+        }),
+      );
     });
 
     it("CASE-ROUTE-002: 多角色命中 — @分析师 @撰稿人 两者均触发", async () => {
@@ -144,10 +149,9 @@ describe("group-router", () => {
         groupRoles: ALL_ROLES,
       });
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      const targets = mockFetch.mock.calls.map(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (call: any) => JSON.parse(call[1].body).target,
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(2);
+      const targets = mockSendInboundToPlugin.mock.calls.map(
+        (call: unknown[]) => (call[0] as { target: string }).target,
       );
       expect(targets).toContain("group:direct:p-grp:role:r-analyst");
       expect(targets).toContain("group:direct:p-grp:role:r-writer");
@@ -163,9 +167,12 @@ describe("group-router", () => {
         groupRoles: ALL_ROLES,
       });
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(callBody.target).toBe("group:direct:p-grp:role:r-pm");
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(1);
+      expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: "group:direct:p-grp:role:r-pm",
+        }),
+      );
     });
 
     it("角色回复无 @ — 兜底转发给 Leader", async () => {
@@ -180,9 +187,12 @@ describe("group-router", () => {
       });
 
       // 应该 dispatch 给 PM（Leader）
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(callBody.target).toBe("group:direct:p-grp:role:r-pm");
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(1);
+      expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: "group:direct:p-grp:role:r-pm",
+        }),
+      );
     });
 
     it("Leader 回复无 @ — 不会自己转发给自己", async () => {
@@ -197,7 +207,7 @@ describe("group-router", () => {
       });
 
       // PM 是 Leader，无 @ 且发送者是 Leader → 不转发
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockSendInboundToPlugin).not.toHaveBeenCalled();
     });
 
     it("角色 @ 自己 — 过滤掉自身", async () => {
@@ -212,9 +222,12 @@ describe("group-router", () => {
       });
 
       // 应该只 dispatch 给撰稿人，不给分析师自己
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(callBody.target).toBe("group:direct:p-grp:role:r-writer");
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(1);
+      expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: "group:direct:p-grp:role:r-writer",
+        }),
+      );
     });
 
     it("没有启用角色时不触发", async () => {
@@ -228,22 +241,16 @@ describe("group-router", () => {
         groupRoles: disabledRoles,
       });
 
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockSendInboundToPlugin).not.toHaveBeenCalled();
     });
 
     it("角色本地卡 busy 但远端已终态时，会先自愈再直接 dispatch", async () => {
       const { routeMessage } = await import("@/lib/group-router");
 
       vi.useFakeTimers();
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ runId: "run-stuck", status: "ok" }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ runId: "run-recovered", status: "ok" }),
-        });
+      mockSendInboundToPlugin
+        .mockResolvedValueOnce({ runId: "run-stuck", status: "ok" })
+        .mockResolvedValueOnce({ runId: "run-recovered", status: "ok" });
 
       await routeMessage({
         panelId: "p-grp",
@@ -265,9 +272,10 @@ describe("group-router", () => {
       });
 
       expect(mockInspectProviderSession).toHaveBeenCalledTimes(1);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      const secondCallBody = JSON.parse(mockFetch.mock.calls[1][1].body);
-      expect(secondCallBody.target).toBe("group:direct:p-grp:role:r-analyst");
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(2);
+      expect(mockSendInboundToPlugin.mock.calls[1][0]).toMatchObject({
+        target: "group:direct:p-grp:role:r-analyst",
+      });
       vi.useRealTimers();
     });
   });
@@ -285,9 +293,12 @@ describe("group-router", () => {
       });
 
       // 应该 dispatch 给撰稿人
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(callBody.target).toBe("group:direct:p-grp:role:r-writer");
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(1);
+      expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: "group:direct:p-grp:role:r-writer",
+        }),
+      );
     });
 
     it("回复无 @ 则兜底给 Leader", async () => {
@@ -301,9 +312,12 @@ describe("group-router", () => {
         groupRoles: ALL_ROLES,
       });
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(callBody.target).toBe("group:direct:p-grp:role:r-pm");
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(1);
+      expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: "group:direct:p-grp:role:r-pm",
+        }),
+      );
     });
   });
 

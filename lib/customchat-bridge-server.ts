@@ -55,7 +55,7 @@ const INBOUND_ACK_TIMEOUT_MS = 30_000;
 let pluginSocket: WebSocket | null = null;
 
 type PendingAck = {
-  resolve: (value: { runId: string; status: string }) => void;
+  resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 };
@@ -181,13 +181,9 @@ async function handleEnvelope(socket: WebSocket, envelope: BridgeEnvelope) {
     pendingAcks.delete(envelope.requestId);
     clearTimeout(pending.timer);
     if (envelope.ok) {
-      const result = envelope.result as Record<string, unknown> | undefined;
-      pending.resolve({
-        runId: (typeof result?.runId === "string" && result.runId.trim()) || "",
-        status: (typeof result?.status === "string" && result.status.trim()) || "started",
-      });
+      pending.resolve(envelope.result ?? {});
     } else {
-      pending.reject(new Error(envelope.error || "Plugin rejected inbound message."));
+      pending.reject(new Error(envelope.error || "Plugin rejected request."));
     }
     return;
   }
@@ -325,7 +321,41 @@ export function ensureCustomChatBridgeServer() {
   return globalThis.__chatbotCustomChatBridgeServerStarted;
 }
 
-// ── Public API: App → Plugin inbound ────────────────────────────────
+// ── Public API: App → Plugin ─────────────────────────────────────────
+
+/**
+ * 向 Plugin 发送 WS 消息并等待 ack 返回结果（通用底层方法）
+ */
+async function sendToPlugin(
+  msgType: string,
+  payload: unknown,
+  label: string,
+): Promise<unknown> {
+  await ensureCustomChatBridgeServer();
+
+  if (!pluginSocket || pluginSocket.readyState !== pluginSocket.OPEN) {
+    throw new Error("Plugin WebSocket is not connected.");
+  }
+
+  const requestId = `${msgType}:${crypto.randomUUID()}`;
+
+  return new Promise<unknown>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingAcks.delete(requestId);
+      reject(new Error(`Plugin ${label} ack timed out.`));
+    }, INBOUND_ACK_TIMEOUT_MS);
+
+    pendingAcks.set(requestId, { resolve, reject, timer });
+
+    log.input(label, { requestId });
+
+    sendJson(pluginSocket!, {
+      type: msgType,
+      requestId,
+      payload,
+    });
+  });
+}
 
 export type InboundPayload = {
   panelId?: string;
@@ -338,39 +368,25 @@ export type InboundPayload = {
 
 /**
  * 通过 WebSocket 向 Plugin 发送 inbound 用户消息
- * @throws {Error} Plugin 未连接或 ack 超时
  */
 export async function sendInboundToPlugin(
   payload: InboundPayload,
 ): Promise<{ runId: string; status: string }> {
-  await ensureCustomChatBridgeServer();
+  const result = await sendToPlugin("inbound", payload, "sendInboundToPlugin") as Record<string, unknown>;
+  return {
+    runId: (typeof result?.runId === "string" && result.runId.trim()) || "",
+    status: (typeof result?.status === "string" && result.status.trim()) || "started",
+  };
+}
 
-  if (!pluginSocket || pluginSocket.readyState !== pluginSocket.OPEN) {
-    throw new Error("Plugin WebSocket is not connected.");
-  }
-
-  const requestId = `inbound:${crypto.randomUUID()}`;
-
-  return new Promise<{ runId: string; status: string }>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pendingAcks.delete(requestId);
-      reject(new Error("Plugin inbound ack timed out."));
-    }, INBOUND_ACK_TIMEOUT_MS);
-
-    pendingAcks.set(requestId, { resolve, reject, timer });
-
-    log.input("sendInboundToPlugin", {
-      requestId,
-      target: payload.target,
-      messageId: payload.messageId,
-    });
-
-    sendJson(pluginSocket!, {
-      type: "inbound",
-      requestId,
-      payload,
-    });
-  });
+/**
+ * 通过 WebSocket 向 Plugin 发送 RPC 调用（管理类 API）
+ */
+export async function sendRpcToPlugin<T = unknown>(
+  method: string,
+  params?: Record<string, unknown>,
+): Promise<T> {
+  return sendToPlugin("rpc", { method, params: params ?? {} }, `rpc:${method}`) as Promise<T>;
 }
 
 /**

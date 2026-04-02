@@ -3,17 +3,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock "server-only"
 vi.mock("server-only", () => ({}));
 
-// Mock env
-vi.mock("@/lib/env", () => ({
-  getEnv: () => ({
-    providerBaseUrl: "http://127.0.0.1:18789",
-    customChatAuthToken: "test-token",
+// Mock logger
+vi.mock("@/lib/logger", () => ({
+  createLogger: () => ({
+    input: vi.fn(),
+    output: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
-// Mock global fetch
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
+// Mock bridge server
+const mockSendRpcToPlugin = vi.fn();
+const mockEnsureCustomChatBridgeServer = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/lib/customchat-bridge-server", () => ({
+  sendRpcToPlugin: (...args: unknown[]) => mockSendRpcToPlugin(...args),
+  ensureCustomChatBridgeServer: () => mockEnsureCustomChatBridgeServer(),
+}));
 
 describe("customchat-provider", () => {
   beforeEach(() => {
@@ -21,45 +27,37 @@ describe("customchat-provider", () => {
   });
 
   describe("deleteProviderSession", () => {
-    it("sends DELETE request with correct auth", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ ok: true }),
-      });
+    it("calls session.delete RPC with correct params", async () => {
+      mockSendRpcToPlugin.mockResolvedValue({ ok: true, keys: ["key1"] });
 
       const { deleteProviderSession } = await import("@/lib/customchat-provider");
-      await deleteProviderSession({ panelId: "p1", agentId: "main" });
+      const result = await deleteProviderSession({ panelId: "p1", agentId: "main" });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        "http://127.0.0.1:18789/customchat/session",
+      expect(mockEnsureCustomChatBridgeServer).toHaveBeenCalled();
+      expect(mockSendRpcToPlugin).toHaveBeenCalledWith(
+        "session.delete",
         expect.objectContaining({
-          method: "DELETE",
-          headers: expect.objectContaining({
-            Authorization: "Bearer test-token",
-          }),
-        })
+          panelId: "p1",
+          agentId: "main",
+          target: "channel:p1",
+        }),
       );
+      expect(result).toEqual({ ok: true, keys: ["key1"] });
     });
 
-    it("throws on non-ok response", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        json: async () => ({ error: "not found" }),
-      });
+    it("throws on RPC error", async () => {
+      mockSendRpcToPlugin.mockRejectedValue(new Error("session delete failed"));
 
       const { deleteProviderSession } = await import("@/lib/customchat-provider");
       await expect(
-        deleteProviderSession({ panelId: "p1", agentId: "main" })
-      ).rejects.toThrow("not found");
+        deleteProviderSession({ panelId: "p1", agentId: "main" }),
+      ).rejects.toThrow("session delete failed");
     });
   });
 
   describe("abortProviderRun", () => {
-    it("sends POST request with correct body", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ ok: true, verified: true }),
-      });
+    it("calls session.abort RPC with correct params", async () => {
+      mockSendRpcToPlugin.mockResolvedValue({ ok: true, verified: true });
 
       const { abortProviderRun } = await import("@/lib/customchat-provider");
       const result = await abortProviderRun({
@@ -69,47 +67,55 @@ describe("customchat-provider", () => {
         sessionKey: "panel:p1",
       });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        "http://127.0.0.1:18789/customchat/abort",
+      expect(mockSendRpcToPlugin).toHaveBeenCalledWith(
+        "session.abort",
         expect.objectContaining({
-          method: "POST",
-          headers: expect.objectContaining({
-            Authorization: "Bearer test-token",
-          }),
-        })
+          panelId: "p1",
+          agentId: "main",
+          runId: "run-1",
+          sessionKey: "panel:p1",
+        }),
       );
       expect(result).toEqual({ ok: true, verified: true });
     });
 
-    it("throws on failure", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        json: async () => ({ error: "abort failed" }),
-      });
+    it("throws on RPC failure", async () => {
+      mockSendRpcToPlugin.mockRejectedValue(new Error("abort failed"));
 
       const { abortProviderRun } = await import("@/lib/customchat-provider");
       await expect(
-        abortProviderRun({ panelId: "p1", agentId: "main" })
+        abortProviderRun({ panelId: "p1", agentId: "main" }),
       ).rejects.toThrow("abort failed");
     });
   });
-});
 
-describe("customchat-provider without config", () => {
-  it("throws when providerBaseUrl is empty", async () => {
-    vi.doMock("@/lib/env", () => ({
-        getEnv: () => ({
-          providerBaseUrl: "",
-          customChatAuthToken: "token",
-        }),
-    }));
+  describe("inspectProviderSession", () => {
+    it("calls session.inspect RPC", async () => {
+      mockSendRpcToPlugin.mockResolvedValue({ ok: true, exists: true, terminal: false });
 
-    // Reset module to pick up new mock
-    vi.resetModules();
-    vi.mock("server-only", () => ({}));
-    const { deleteProviderSession } = await import("@/lib/customchat-provider");
-    await expect(
-      deleteProviderSession({ panelId: "p1", agentId: "main" })
-    ).rejects.toThrow("CUSTOMCHAT_PROVIDER_BASE_URL");
+      const { inspectProviderSession } = await import("@/lib/customchat-provider");
+      const result = await inspectProviderSession({ panelId: "p1", agentId: "main", target: "channel:p1" });
+
+      expect(mockSendRpcToPlugin).toHaveBeenCalledWith(
+        "session.inspect",
+        expect.objectContaining({ panelId: "p1", agentId: "main", target: "channel:p1" }),
+      );
+      expect(result?.exists).toBe(true);
+    });
+  });
+
+  describe("readProviderSessionStatus", () => {
+    it("calls session.status RPC", async () => {
+      mockSendRpcToPlugin.mockResolvedValue({ ok: true, exists: true, statusText: "running" });
+
+      const { readProviderSessionStatus } = await import("@/lib/customchat-provider");
+      const result = await readProviderSessionStatus({ panelId: "p1", agentId: "main" });
+
+      expect(mockSendRpcToPlugin).toHaveBeenCalledWith(
+        "session.status",
+        expect.objectContaining({ panelId: "p1", agentId: "main" }),
+      );
+      expect(result?.statusText).toBe("running");
+    });
   });
 });

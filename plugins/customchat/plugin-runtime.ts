@@ -2684,8 +2684,136 @@ async function processInboundPayload(parsed: InboundRequestPayload) {
   };
 }
 
+// ── RPC dispatch (App → Plugin 管理类 API) ─────────────────────────
+
 /**
- * 持久 WebSocket 消息处理器：处理 App 发来的 inbound 消息。
+ * 根据 method 名分派到对应的内部函数。
+ * method 命名约定: "domain.action"，如 "agents.list", "session.delete" 等。
+ */
+async function dispatchRpcMethod(method: string, params: JsonRecord): Promise<unknown> {
+  switch (method) {
+    case "agents.list": {
+      const agents = await listAgents();
+      return { ok: true, agents };
+    }
+
+    case "agent.avatar": {
+      const agentId = typeof params.agentId === "string" ? params.agentId.trim() : "";
+      if (!agentId) {
+        throw new Error("agentId is required.");
+      }
+      const configPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
+      const config = JSON.parse(await fs.readFile(configPath, "utf8"));
+      const list = config?.agents?.list || [];
+      const defaults = config?.agents?.defaults || {};
+      const record = list.find((candidate: unknown) => {
+        const agent = toAgentView(asJsonRecord(candidate));
+        return agent?.id === agentId;
+      });
+      if (!record) {
+        throw new Error("Agent not found.");
+      }
+      const enrichedRecord = {
+        ...record,
+        workspace: record.workspace || defaults.workspace,
+        agentDir: record.agentDir || path.join(os.homedir(), ".openclaw", "agents", agentId, "agent"),
+      };
+      const avatarPath = await findAgentAvatarPath(enrichedRecord, agentId);
+      if (!avatarPath) {
+        throw new Error("Avatar not found.");
+      }
+      const content = await fs.readFile(avatarPath);
+      return {
+        ok: true,
+        mimeType: guessImageMimeType(avatarPath),
+        base64: content.toString("base64"),
+      };
+    }
+
+    case "session.inspect": {
+      const result = await inspectCustomChatSession({
+        target: typeof params.target === "string" ? params.target : null,
+        sessionKey: typeof params.sessionKey === "string" ? params.sessionKey : null,
+        runId: typeof params.runId === "string" ? params.runId : null,
+        agentId: typeof params.agentId === "string" ? params.agentId : null,
+        panelId: typeof params.panelId === "string" ? params.panelId : null,
+      });
+      return { ok: true, ...result };
+    }
+
+    case "session.status": {
+      const result = await readCustomChatSessionStatus({
+        target: typeof params.target === "string" ? params.target : null,
+        sessionKey: typeof params.sessionKey === "string" ? params.sessionKey : null,
+        runId: typeof params.runId === "string" ? params.runId : null,
+        agentId: typeof params.agentId === "string" ? params.agentId : null,
+        panelId: typeof params.panelId === "string" ? params.panelId : null,
+      });
+      return { ok: true, ...result };
+    }
+
+    case "session.abort": {
+      const result = await abortCustomChatSession({
+        target: typeof params.target === "string" ? params.target : null,
+        sessionKey: typeof params.sessionKey === "string" ? params.sessionKey : null,
+        runId: typeof params.runId === "string" ? params.runId : null,
+        agentId: typeof params.agentId === "string" ? params.agentId : null,
+        panelId: typeof params.panelId === "string" ? params.panelId : null,
+      });
+      return { ...result };
+    }
+
+    case "session.delete": {
+      const target = normalizeChannelTarget(
+        (typeof params.target === "string" ? params.target : "") ||
+        `channel:${typeof params.panelId === "string" ? params.panelId : ""}`,
+      );
+      if (!target) {
+        throw new Error("target is required.");
+      }
+      const remembered = await findRouteBinding({
+        target,
+        sessionKey: typeof params.sessionKey === "string" ? params.sessionKey.trim() : null,
+      });
+      const agentId = (typeof params.agentId === "string" && params.agentId.trim()) || remembered?.agentId || "main";
+      const key =
+        normalizeSessionKeyCandidate(typeof params.sessionKey === "string" ? params.sessionKey : null) ||
+        normalizeSessionKeyCandidate(remembered?.sessionKey) ||
+        normalizeSessionKeyCandidate(remembered?.expectedSessionKey) ||
+        buildCanonicalSessionKey(agentId, target);
+
+      const deleteKeys = new Set<string>();
+      deleteKeys.add(key);
+      if (!key.includes(":group:")) {
+        deleteKeys.add(key.replace(":customchat:", ":customchat:group:"));
+      }
+      if (key.includes(":group:")) {
+        deleteKeys.add(key.replace(":group:", ":"));
+      }
+
+      const deleteTranscript = params.deleteTranscript !== false;
+      for (const k of deleteKeys) {
+        deleteGatewaySession(k, deleteTranscript).catch((error) => {
+          console.error(`[customchat] rpc session.delete failed for ${k}:`, error);
+        });
+      }
+
+      await removeRouteBinding({
+        target,
+        sessionKey: key,
+        expectedSessionKey: remembered?.expectedSessionKey || key,
+      });
+
+      return { ok: true, keys: Array.from(deleteKeys) };
+    }
+
+    default:
+      throw new Error(`Unknown RPC method: ${method}`);
+  }
+}
+
+/**
+ * 持久 WebSocket 消息处理器：处理 App 发来的 inbound / rpc 消息。
  * 注册在 portal socket 上，与 sendPortalEnvelope 的 per-request ack 监听共存。
  */
 function handlePortalInboundMessage(event: MessageEvent) {
@@ -2702,48 +2830,63 @@ function handlePortalInboundMessage(event: MessageEvent) {
     return;
   }
 
-  if (typeof frame.type !== "string" || frame.type !== "inbound") {
-    return; // 非 inbound 消息，交给其他 handler 处理
+  if (typeof frame.type !== "string" || (frame.type !== "inbound" && frame.type !== "rpc")) {
+    return; // 非 inbound/rpc 消息，交给其他 handler 处理
   }
 
   const requestId = typeof frame.requestId === "string" ? frame.requestId : "";
-  const payload = frame.payload as InboundRequestPayload | undefined;
 
-  void (async () => {
-    try {
-      if (!payload) {
-        throw new Error("Invalid inbound payload.");
-      }
-      pluginLog("inbound", "handlePortalInboundMessage", "← received", {
-        requestId,
-        target: payload.target || "",
-        messageId: payload.messageId || "",
-      });
-      const result = await processInboundPayload(payload);
-      if (portalSocket && portalSocket.readyState === portalSocket.OPEN) {
-        portalSocket.send(
-          JSON.stringify({
-            type: "ack",
-            requestId,
-            ok: true,
-            result,
-          }),
-        );
-      }
-    } catch (error) {
-      console.error("[customchat] inbound WS handler error", error);
-      if (portalSocket && portalSocket.readyState === portalSocket.OPEN) {
-        portalSocket.send(
-          JSON.stringify({
-            type: "ack",
-            requestId,
-            ok: false,
-            error: error instanceof Error ? error.message : "customchat inbound failed.",
-          }),
-        );
-      }
+  const sendAck = (ok: boolean, data: unknown) => {
+    if (portalSocket && portalSocket.readyState === portalSocket.OPEN) {
+      portalSocket.send(
+        JSON.stringify(
+          ok
+            ? { type: "ack", requestId, ok: true, result: data }
+            : { type: "ack", requestId, ok: false, error: data },
+        ),
+      );
     }
-  })();
+  };
+
+  if (frame.type === "inbound") {
+    const payload = frame.payload as InboundRequestPayload | undefined;
+    void (async () => {
+      try {
+        if (!payload) {
+          throw new Error("Invalid inbound payload.");
+        }
+        pluginLog("inbound", "handlePortalInboundMessage", "← received", {
+          requestId,
+          target: payload.target || "",
+          messageId: payload.messageId || "",
+        });
+        const result = await processInboundPayload(payload);
+        sendAck(true, result);
+      } catch (error) {
+        console.error("[customchat] inbound WS handler error", error);
+        sendAck(false, error instanceof Error ? error.message : "customchat inbound failed.");
+      }
+    })();
+    return;
+  }
+
+  if (frame.type === "rpc") {
+    const rpcPayload = frame.payload as JsonRecord | undefined;
+    const method = typeof rpcPayload?.method === "string" ? rpcPayload.method : "";
+    const params = (rpcPayload?.params && typeof rpcPayload.params === "object" ? rpcPayload.params : {}) as JsonRecord;
+
+    void (async () => {
+      try {
+        pluginLog("rpc", "handlePortalRpc", `← ${method}`, { requestId });
+        const result = await dispatchRpcMethod(method, params);
+        sendAck(true, result);
+      } catch (error) {
+        console.error(`[customchat] rpc:${method} error`, error);
+        sendAck(false, error instanceof Error ? error.message : `rpc:${method} failed.`);
+      }
+    })();
+    return;
+  }
 }
 
 /**
