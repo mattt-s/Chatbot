@@ -3228,6 +3228,9 @@ export function initializeCustomChatRuntime(api: CustomChatHttpRouteApi) {
     globalThis.setTimeout(() => {
       ensureGatewaySubscriber();
     }, GATEWAY_SUBSCRIBER_START_DELAY_MS);
+    // 主动建立到 App bridge 的 WebSocket 连接，确保 App → Plugin 的 inbound/rpc 消息
+    // 在第一条用户消息到达时已经可用（不等到第一次 deliver 才懒连接）。
+    void resolveDefaultAccountConfig().then((cfg) => ensurePortalSocket(cfg)).catch(() => null);
   } else {
     // Only restore runs if we might need them for CLI commands that query history/status.
     // But don't start the background subscriber loop.
