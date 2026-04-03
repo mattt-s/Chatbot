@@ -1888,6 +1888,28 @@ async function handleTrackedGatewayAgentEvent(payload: JsonRecord) {
 
   if (!runId) return;
 
+  if (stream === "assistant") {
+    const trackedRun = trackedRuns.get(runId);
+    if (!trackedRun) {
+      console.log(`[customchat:stream] assistant event ignored: no trackedRun for runId=${runId}`);
+      return;
+    }
+
+    const latestText = extractStringValue(data.text);
+    const deltaText = extractStringValue(data.delta);
+    if (latestText) {
+      trackedRun.latestAssistantText = latestText;
+    } else if (deltaText) {
+      trackedRun.latestAssistantText += deltaText;
+    } else {
+      return;
+    }
+
+    const accountConfig = await resolveDefaultAccountConfig();
+    queueTrackedRunDeltaFlush(accountConfig, trackedRun);
+    return;
+  }
+
   // Handle lifecycle phase=end: finalize any bubble that never received event:chat state=final
   // (e.g. agent ran tools but produced no text output).
   if (stream === "lifecycle") {
