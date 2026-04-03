@@ -186,6 +186,9 @@ type ChannelContext = {
     };
   };
   accountId?: string;
+  runId?: string;
+  sessionKey?: string;
+  agentId?: string;
 };
 
 type InboundRequestPayload = {
@@ -2359,8 +2362,6 @@ async function launchChatTurn(input: LaunchChatTurnInput) {
     sessionKey: expectedSessionKey,
     idempotencyKey: input.messageId,
     message: input.message,
-    turnSourceChannel: "customchat",
-    turnSourceTo: input.target,
   });
 
   const payloadRecord = asJsonRecord(payload);
@@ -2537,8 +2538,8 @@ async function postDelivery(accountConfig: AccountConfig, body: JsonRecord) {
  * @param accountConfig - 账户配置
  * @returns 投递结果
  */
-async function deliverMessage(input: unknown, accountConfig: AccountConfig) {
-  const runId = extractRunId(input);
+async function deliverMessage(input: unknown, accountConfig: AccountConfig, ctxRunId?: string) {
+  const runId = extractRunId(input) || ctxRunId?.trim() || null;
   const sessionKeyHint = extractSessionKeyHint(input);
   const messageId = buildMessageId(input);
   const explicitTarget = (() => {
@@ -3293,15 +3294,15 @@ export function buildCustomChatPlugin() {
       },
       async sendText(input: unknown, ctx: ChannelContext | undefined) {
         const accountConfig = await resolveDefaultAccountConfig();
-        return deliverMessage(input, accountConfig);
+        return deliverMessage(input, accountConfig, ctx?.runId);
       },
       async sendMedia(input: unknown, ctx: ChannelContext | undefined) {
         const accountConfig = await resolveDefaultAccountConfig();
-        return deliverMessage(input, accountConfig);
+        return deliverMessage(input, accountConfig, ctx?.runId);
       },
       async sendMessage(input: unknown, ctx: ChannelContext | undefined) {
         const accountConfig = await resolveDefaultAccountConfig();
-        return deliverMessage(input, accountConfig);
+        return deliverMessage(input, accountConfig, ctx?.runId);
       },
     },
   };
