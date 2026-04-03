@@ -2362,7 +2362,6 @@ async function launchChatTurn(input: LaunchChatTurnInput) {
     sessionKey: expectedSessionKey,
     idempotencyKey: input.messageId,
     message: input.message,
-    target: input.target,
   });
 
   const payloadRecord = asJsonRecord(payload);
