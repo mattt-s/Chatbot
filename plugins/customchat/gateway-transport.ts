@@ -153,13 +153,16 @@ export async function sendGatewayChatTurn(input: {
   sessionKey: string;
   idempotencyKey: string;
   message: string;
-  target?: string;
+  originatingChannel?: string;
+  originatingTo?: string;
 }) {
   return runGatewayCall("chat.send", {
     sessionKey: input.sessionKey,
     idempotencyKey: input.idempotencyKey,
     message: input.message,
     deliver: false,
+    ...(input.originatingChannel ? { originatingChannel: input.originatingChannel } : {}),
+    ...(input.originatingTo ? { originatingTo: input.originatingTo } : {}),
   });
 }
 
