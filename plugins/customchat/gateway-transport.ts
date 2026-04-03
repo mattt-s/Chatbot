@@ -139,7 +139,7 @@ export async function fetchGatewayChatHistory(sessionKey: string, limit = 100) {
 }
 
 export async function abortGatewaySession(sessionKey: string) {
-  return runGatewayCall("chat.abort", { sessionKey });
+  return runGatewayCall("sessions.abort", { key: sessionKey });
 }
 
 export async function deleteGatewaySession(key: string, deleteTranscript: boolean) {
