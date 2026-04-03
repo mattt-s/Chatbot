@@ -139,29 +139,10 @@ export async function fetchGatewayChatHistory(sessionKey: string, limit = 100) {
 }
 
 export async function abortGatewaySession(sessionKey: string, runId?: string | null) {
-  // sessions.abort only handles chat.send runs (chatAbortControllers).
-  // agent RPC runs go through the embedded pi engine and can only be
-  // interrupted via sessions.steer (which calls abortEmbeddedPiRun internally).
-  // Strategy: steer with a no-op message to interrupt any active run, then
-  // immediately abort the resulting new run from steer.
-  const steerResult = await runGatewayCall("sessions.steer", {
-    key: sessionKey,
-    message: ".",
-    ...(runId?.trim() ? { idempotencyKey: `abort:${runId.trim()}` } : {}),
-  }).catch(() => null);
-
-  const steerRecord = asJsonRecord(steerResult ?? {});
-  const newRunId =
-    typeof steerRecord.runId === "string" ? steerRecord.runId.trim() : null;
-
-  if (newRunId) {
-    await runGatewayCall("sessions.abort", {
-      key: sessionKey,
-      runId: newRunId,
-    }).catch(() => null);
-  }
-
-  return steerResult;
+  return runGatewayCall("chat.abort", {
+    sessionKey,
+    ...(runId?.trim() ? { runId: runId.trim() } : {}),
+  });
 }
 
 export async function deleteGatewaySession(key: string, deleteTranscript: boolean) {
@@ -174,12 +155,10 @@ export async function sendGatewayChatTurn(input: {
   message: string;
   target?: string;
 }) {
-  return runGatewayCall("agent", {
+  return runGatewayCall("chat.send", {
     sessionKey: input.sessionKey,
     idempotencyKey: input.idempotencyKey,
     message: input.message,
-    channel: "customchat",
-    to: input.target,
     deliver: false,
   });
 }
