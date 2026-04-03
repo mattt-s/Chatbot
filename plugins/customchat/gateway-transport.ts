@@ -151,10 +151,11 @@ export async function sendGatewayChatTurn(input: {
   idempotencyKey: string;
   message: string;
 }) {
-  return runGatewayCall("chat.send", {
+  return runGatewayCall("agent", {
     sessionKey: input.sessionKey,
     idempotencyKey: input.idempotencyKey,
     message: input.message,
+    channel: "customchat",
     deliver: false,
   });
 }
