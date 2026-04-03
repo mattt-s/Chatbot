@@ -464,7 +464,7 @@ export async function abortCustomChatSession(
     remembered?.runIds.at(-1) ||
     null;
 
-  await abortGatewaySession(sessionKey);
+  await abortGatewaySession(sessionKey, runId);
 
   let verified = false;
   if (runId) {

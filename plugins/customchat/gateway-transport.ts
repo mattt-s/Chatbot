@@ -138,8 +138,11 @@ export async function fetchGatewayChatHistory(sessionKey: string, limit = 100) {
   return runGatewayCall("chat.history", { sessionKey, limit });
 }
 
-export async function abortGatewaySession(sessionKey: string) {
-  return runGatewayCall("sessions.abort", { key: sessionKey });
+export async function abortGatewaySession(sessionKey: string, runId?: string | null) {
+  return runGatewayCall("sessions.abort", {
+    key: sessionKey,
+    ...(runId?.trim() ? { runId: runId.trim() } : {}),
+  });
 }
 
 export async function deleteGatewaySession(key: string, deleteTranscript: boolean) {
