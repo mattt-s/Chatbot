@@ -64,18 +64,9 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
 
-  if (providerAbort?.verified === false) {
-    return NextResponse.json(
-      {
-        ok: true,
-        status: "aborting",
-        runId,
-        session: providerAbort.session ?? null,
-      },
-      { status: 202 },
-    );
-  }
-
+  // Always block the run and publish aborted state regardless of whether the
+  // Gateway confirmed the abort. The user clicked stop — no further deliveries
+  // should reach the UI even if the LLM finishes generating in the background.
   await blockPanelRun(panelId, runId).catch(() => null);
   const aborted = await abortAssistantRun(panelId, runId).catch(() => null);
   await setPanelActiveRun(panelId, null).catch(() => null);
@@ -90,6 +81,18 @@ export async function POST(_request: Request, context: RouteContext) {
     },
     stopReason: "user aborted",
   });
+
+  if (providerAbort?.verified === false) {
+    return NextResponse.json(
+      {
+        ok: true,
+        status: "aborting",
+        runId,
+        session: providerAbort.session ?? null,
+      },
+      { status: 202 },
+    );
+  }
 
   return NextResponse.json({
     ok: true,

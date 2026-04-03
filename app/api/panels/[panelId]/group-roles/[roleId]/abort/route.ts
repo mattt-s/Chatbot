@@ -42,17 +42,9 @@ export async function POST(_request: Request, context: RouteContext) {
       });
     }
 
-    if (result.status === "aborting") {
-      return NextResponse.json(
-        {
-          ok: true,
-          status: "aborting",
-          runId: result.runId,
-        },
-        { status: 202 },
-      );
-    }
-
+    // Always block the run and publish aborted state regardless of verification.
+    // The user clicked stop — no further deliveries should reach the UI even if
+    // the LLM finishes generating in the background.
     await blockPanelRun(panelId, result.runId).catch(() => null);
     const aborted = await abortAssistantRun(panelId, result.runId, "group role aborted").catch(() => null);
 
@@ -68,6 +60,17 @@ export async function POST(_request: Request, context: RouteContext) {
       groupRoleId: roleId,
       senderLabel: role.title,
     });
+
+    if (result.status === "aborting") {
+      return NextResponse.json(
+        {
+          ok: true,
+          status: "aborting",
+          runId: result.runId,
+        },
+        { status: 202 },
+      );
+    }
 
     return NextResponse.json({
       ok: true,
