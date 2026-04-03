@@ -49,7 +49,6 @@ import {
   toAgentView,
   parseJsonOutput,
   readAuthorizationToken,
-  shouldInjectRoutingHint,
   buildInboundAgentMessage,
   base64UrlEncode,
   buildDeviceAuthPayloadV3,
@@ -1119,27 +1118,6 @@ describe("readAuthorizationToken", () => {
 });
 
 // =========================================================================
-// shouldInjectRoutingHint
-// =========================================================================
-describe("shouldInjectRoutingHint", () => {
-  it("returns true when target is unknown", () => {
-    expect(shouldInjectRoutingHint({ targetAlreadyKnown: false, text: "", attachmentCount: 0 })).toBe(true);
-  });
-  it("returns true when has attachments", () => {
-    expect(shouldInjectRoutingHint({ targetAlreadyKnown: true, text: "", attachmentCount: 1 })).toBe(true);
-  });
-  it("returns true for text with media keywords", () => {
-    expect(shouldInjectRoutingHint({ targetAlreadyKnown: true, text: "请发送图片", attachmentCount: 0 })).toBe(true);
-  });
-  it("returns true for text with English keywords", () => {
-    expect(shouldInjectRoutingHint({ targetAlreadyKnown: true, text: "send me a file", attachmentCount: 0 })).toBe(true);
-  });
-  it("returns false for known target, no attachments, no keywords", () => {
-    expect(shouldInjectRoutingHint({ targetAlreadyKnown: true, text: "hello", attachmentCount: 0 })).toBe(false);
-  });
-});
-
-// =========================================================================
 // buildInboundAgentMessage
 // =========================================================================
 describe("buildInboundAgentMessage", () => {
@@ -1147,10 +1125,8 @@ describe("buildInboundAgentMessage", () => {
     expect(buildInboundAgentMessage("direct:abc", "hello", [], null)).toBe("hello");
   });
 
-  it("includes routing hint when requested", () => {
-    const result = buildInboundAgentMessage("direct:abc", "hello", [], null, { includeRoutingHint: true });
-    expect(result).toContain("[customchat reply routing]");
-    expect(result).toContain("direct:abc");
+  it("returns empty string for no text and no files", () => {
+    expect(buildInboundAgentMessage("direct:abc", "", [], null)).toBe("");
   });
 
   it("includes attachment listing", () => {
@@ -1163,6 +1139,7 @@ describe("buildInboundAgentMessage", () => {
     expect(result).toContain("[OpenClaw local files]");
     expect(result).toContain("/tmp/doc.pdf");
     expect(result).toContain("manifest.json: /tmp/manifest.json");
+    expect(result).not.toContain("[customchat reply routing]");
   });
 
   it("includes extracted text for text-like files", () => {

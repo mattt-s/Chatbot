@@ -56,7 +56,6 @@ import {
   isTerminalGatewayWaitStatus,
   toAgentView,
   readAuthorizationToken,
-  shouldInjectRoutingHint,
   buildInboundAgentMessage,
   base64UrlEncode,
   buildDeviceAuthPayloadV3,
@@ -2360,6 +2359,8 @@ async function launchChatTurn(input: LaunchChatTurnInput) {
     sessionKey: expectedSessionKey,
     idempotencyKey: input.messageId,
     message: input.message,
+    turnSourceChannel: "customchat",
+    turnSourceTo: input.target,
   });
 
   const payloadRecord = asJsonRecord(payload);
@@ -2630,21 +2631,11 @@ async function processInboundPayload(parsed: InboundRequestPayload) {
     messageId,
     attachments,
   );
-  const existingBinding = await findRouteBinding({
-    target,
-  });
   const message = buildInboundAgentMessage(
     target,
     parsed.text || "",
     materialized.files,
     materialized.manifestPath,
-    {
-      includeRoutingHint: shouldInjectRoutingHint({
-        targetAlreadyKnown: Boolean(existingBinding),
-        text: parsed.text || "",
-        attachmentCount: attachments.length,
-      }),
-    },
   );
   const agentId = parsed.agentId?.trim() || "main";
   const launched = await launchChatTurn({

@@ -1322,35 +1322,12 @@ export function readAuthorizationToken(req: { headers: Record<string, string | s
 // ---------------------------------------------------------------------------
 
 /**
- * 判断是否需要在入站消息中注入路由提示。
- * 当目标未知、有附件、或文本含媒体相关关键词时返回 true。
- * @param input - 包含 targetAlreadyKnown、text、attachmentCount 的参数
- * @returns 是否需要注入路由提示
- */
-export function shouldInjectRoutingHint(input: {
-  targetAlreadyKnown: boolean;
-  text: string;
-  attachmentCount: number;
-}) {
-  if (!input.targetAlreadyKnown) {
-    return true;
-  }
-
-  if (input.attachmentCount > 0) {
-    return true;
-  }
-
-  return /附件|图片|图像|image|media|file|文件|avatar|头像/i.test(input.text);
-}
-
-/**
  * 构建发送给 Agent 的入站消息文本。
- * 将用户文本、路由提示、附件信息和提取的文本内容组合成一条完整消息。
- * @param target - 投递目标
+ * 将用户文本、附件信息和提取的文本内容组合成一条完整消息。
+ * @param target - 投递目标（用于附件路径命名，不再注入提示词）
  * @param text - 用户文本
  * @param files - 已物化的附件文件列表
  * @param manifestPath - manifest.json 路径
- * @param options - 可选配置（includeRoutingHint）
  * @returns 组装后的消息文本
  */
 export function buildInboundAgentMessage(
@@ -1364,24 +1341,18 @@ export function buildInboundAgentMessage(
     extractedText: string | null;
   }>,
   manifestPath: string | null,
-  options?: {
-    includeRoutingHint?: boolean;
-  },
 ) {
-  const includeRoutingHint = options?.includeRoutingHint ?? false;
-  const routingBlock = includeRoutingHint
-    ? `\n\n[customchat reply routing]\nCurrent reply channel: customchat\nCurrent reply target: ${target}\nIf you use the OpenClaw message tool with action "send" (including sending images/files/media), you must set channel to exactly customchat and target to exactly ${target}.`
-    : "";
+  void target;
 
   if (files.length === 0) {
-    return `${text.trim()}${routingBlock}`.trim();
+    return text.trim();
   }
 
   const extractedTextBlocks = files
     .filter((file) => file.extractedText)
     .map((file) => `## File: ${file.name}\n${file.extractedText}`);
 
-  const attachmentBlock = `${routingBlock}\n\n[customchat attachments]\n${files
+  const attachmentBlock = `\n\n[customchat attachments]\n${files
       .map((file) => `- ${file.name} (${file.mimeType}, ${file.size} bytes)`)
       .join("\n")}\n\n[OpenClaw local files]\n${files
       .map((file) => `- ${file.name}: ${file.path}`)
