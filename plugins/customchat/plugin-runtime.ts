@@ -1255,7 +1255,7 @@ function resetPortalSocket() {
 }
 
 /**
- * 启动前端 App WebSocket 连接的心跳定时器（每 30 秒发送 ping）。
+ * 启动前端 App WebSocket 连接的心跳定时器（每 15 秒发送应用层 ping）。
  * @param {WebSocket} socket - 前端连接的 WebSocket 实例
  */
 function startPortalHeartbeat(socket: WebSocket) {
