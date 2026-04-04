@@ -281,13 +281,15 @@ export function PanelCard({
       latestMessagePreview: buildLatestMessagePreview(messages),
       messagesLoaded: true,
       messages,
-      groupRoles,
+      // groupRoles 由 refreshPanelMeta/refreshGroupRoles 这些显式刷新入口同步父级，
+      // 这里只沿用当前 panel prop，避免“prop -> local state -> parent”形成回写震荡。
+      groupRoles: panel.groupRoles ?? [],
     });
   }, [
     activeRunId,
-    groupRoles,
     messages,
     onPanelReplaced,
+    panel.groupRoles,
     panelCacheBase,
     panelMessagesReady,
   ]);
