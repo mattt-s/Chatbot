@@ -268,6 +268,7 @@ const ACTIVE_RUN_RECOVERY_INTERVAL_MS = 60_000;
 const ACTIVE_RUN_RECOVERY_THROTTLE_MS = 2_500;
 const ACTIVE_RUN_STALE_TTL_MS = 30 * 60 * 1000;
 const PORTAL_SEND_TIMEOUT_MS = 20_000;
+const PORTAL_BRIDGE_RECONNECT_INTERVAL_MS = 1_000;
 const PORTAL_RECONNECT_BACKOFF_MS = [250, 500, 1_000, 2_000, 4_000];
 const RESTORED_TRACKED_RUN_LIMIT = 16;
 const GATEWAY_SUBSCRIBER_CONNECT_TIMEOUT_MS = 5_000;
@@ -494,6 +495,14 @@ let portalPumpActive = false;
 const portalQueue: PortalQueueItem[] = [];
 let portalPingTimer: ReturnType<typeof globalThis.setInterval> | null = null;
 let portalReconnectAttempts = 0;
+let portalBridgeLoopStarted = false;
+
+function isPortalSocketConnected() {
+  return Boolean(
+    portalSocket &&
+      portalSocket.readyState === portalSocket.OPEN,
+  );
+}
 
 /**
  * 从原始配置中解析并验证账户配置（authToken + 可选 bridgePort）。
@@ -1280,8 +1289,7 @@ function startPortalHeartbeat(socket: WebSocket) {
 async function ensurePortalSocket(accountConfig: AccountConfig) {
   const nextUrl = resolvePortalWsUrl(accountConfig);
   if (
-    portalSocket &&
-    portalSocket.readyState === portalSocket.OPEN &&
+    isPortalSocketConnected() &&
     portalSocketUrl === nextUrl
   ) {
     return;
@@ -1356,6 +1364,30 @@ async function ensurePortalSocket(accountConfig: AccountConfig) {
   });
 
   return portalSocketOpenPromise;
+}
+
+/**
+ * 启动前端 App bridge WebSocket 的后台保活循环。
+ * App 重启导致 socket 断开后，会在后台自动重拨，保证 App → Plugin inbound/rpc 可恢复。
+ */
+function ensurePortalBridgeLoop() {
+  if (portalBridgeLoopStarted) {
+    return;
+  }
+
+  portalBridgeLoopStarted = true;
+  globalThis.setInterval(() => {
+    if (isPortalSocketConnected() || portalSocketOpenPromise) {
+      return;
+    }
+
+    void resolveDefaultAccountConfig()
+      .then((cfg) => ensurePortalSocket(cfg))
+      .then(() => {
+        portalReconnectAttempts = 0;
+      })
+      .catch(() => null);
+  }, PORTAL_BRIDGE_RECONNECT_INTERVAL_MS);
 }
 
 /**
@@ -3244,6 +3276,7 @@ export function initializeCustomChatRuntime(api: CustomChatHttpRouteApi) {
     globalThis.setTimeout(() => {
       ensureGatewaySubscriber();
     }, GATEWAY_SUBSCRIBER_START_DELAY_MS);
+    ensurePortalBridgeLoop();
     // 主动建立到 App bridge 的 WebSocket 连接，确保 App → Plugin 的 inbound/rpc 消息
     // 在第一条用户消息到达时已经可用（不等到第一次 deliver 才懒连接）。
     void resolveDefaultAccountConfig().then((cfg) => ensurePortalSocket(cfg)).catch(() => null);
