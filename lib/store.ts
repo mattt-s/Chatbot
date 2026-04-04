@@ -16,6 +16,7 @@ import bcrypt from "bcryptjs";
 import { getDataFilePath, getDownloadDir, getStorageDir, getUploadDir, getVoiceDir } from "@/lib/env";
 import { normalizeGroupTaskState } from "@/lib/group-task";
 import { createLogger } from "@/lib/logger";
+import { publishDashboardPanelEvent } from "@/lib/panel-events";
 import type {
   AppData,
   AppSettingsView,
@@ -598,11 +599,19 @@ export async function createPanel(
   title: string,
   kind: PanelKind = "direct",
 ) {
-  return mutateData((draft) => {
+  const panel = await mutateData((draft) => {
     const panel = createPanelRecord(userId, agentId, title, kind);
     draft.panels.push(panel);
     return panelToView(panel, [], { groupRoles: draft.groupRoles });
   });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId: panel.id,
+    reason: "panel_created",
+  });
+
+  return panel;
 }
 
 /**
@@ -627,7 +636,7 @@ export async function updatePanel(
     taskStateSelection?: GroupTaskState;
   },
 ) {
-  return mutateData((draft) => {
+  const panel = await mutateData((draft) => {
     const panel = requirePanelOwner(draft.panels, panelId, userId);
     const updatedAt = nowIso();
 
@@ -666,6 +675,14 @@ export async function updatePanel(
       { groupRoles: draft.groupRoles },
     );
   });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId,
+    reason: "panel_updated",
+  });
+
+  return panel;
 }
 
 /**
@@ -676,7 +693,7 @@ export async function updatePanel(
  * @throws {Error} 面板不存在或不属于该用户时抛出异常
  */
 export async function deletePanel(userId: string, panelId: string) {
-  return mutateData(async (draft) => {
+  const result = await mutateData(async (draft) => {
     requirePanelOwner(draft.panels, panelId, userId);
     const attachmentPaths = draft.messages
       .filter((message) => message.panelId === panelId)
@@ -688,6 +705,14 @@ export async function deletePanel(userId: string, panelId: string) {
     await deleteStoredFiles(attachmentPaths);
     return { ok: true };
   });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId,
+    reason: "panel_deleted",
+  });
+
+  return result;
 }
 
 /**
@@ -1485,7 +1510,7 @@ export async function createGroupRole(input: {
   emoji?: string | null;
   isLeader?: boolean;
 }): Promise<GroupRoleView> {
-  return mutateData((draft) => {
+  const { role, userId } = await mutateData((draft) => {
     const panel = draft.panels.find((p) => p.id === input.panelId);
     if (!panel) {
       throw new Error("Panel not found.");
@@ -1517,8 +1542,19 @@ export async function createGroupRole(input: {
     draft.groupRoles.push(role);
     panel.updatedAt = now;
 
-    return groupRoleToView(role);
+    return {
+      role: groupRoleToView(role),
+      userId: panel.userId,
+    };
   });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId: input.panelId,
+    reason: "group_role_created",
+  });
+
+  return role;
 }
 
 /**
@@ -1536,10 +1572,14 @@ export async function updateGroupRole(
     enabled?: boolean;
   },
 ): Promise<GroupRoleView> {
-  return mutateData((draft) => {
+  const { role: nextRole, panelId, userId } = await mutateData((draft) => {
     const role = draft.groupRoles.find((r) => r.id === groupRoleId);
     if (!role) {
       throw new Error("Group role not found.");
+    }
+    const panel = draft.panels.find((candidate) => candidate.id === role.panelId);
+    if (!panel) {
+      throw new Error("Panel not found.");
     }
 
     if (typeof input.title === "string" && input.title.trim()) {
@@ -1555,9 +1595,22 @@ export async function updateGroupRole(
       role.enabled = input.enabled;
     }
     role.updatedAt = nowIso();
+    panel.updatedAt = role.updatedAt;
 
-    return groupRoleToView(role);
+    return {
+      role: groupRoleToView(role),
+      panelId: panel.id,
+      userId: panel.userId,
+    };
   });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId,
+    reason: "group_role_updated",
+  });
+
+  return nextRole;
 }
 
 /**
@@ -1566,14 +1619,32 @@ export async function updateGroupRole(
  * @returns {Promise<{ok: true}>} 删除成功
  */
 export async function removeGroupRole(groupRoleId: string): Promise<{ ok: true }> {
-  return mutateData((draft) => {
+  const { panelId, userId } = await mutateData((draft) => {
     const index = draft.groupRoles.findIndex((r) => r.id === groupRoleId);
     if (index < 0) {
       throw new Error("Group role not found.");
     }
+    const panelId = draft.groupRoles[index].panelId;
+    const panel = draft.panels.find((candidate) => candidate.id === panelId);
+    if (!panel) {
+      throw new Error("Panel not found.");
+    }
+
     draft.groupRoles.splice(index, 1);
-    return { ok: true as const };
+    panel.updatedAt = nowIso();
+    return {
+      panelId,
+      userId: panel.userId,
+    };
   });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId,
+    reason: "group_role_deleted",
+  });
+
+  return { ok: true };
 }
 
 /**
@@ -1587,12 +1658,16 @@ export async function setGroupRoleLeader(
   panelId: string,
   groupRoleId: string,
 ): Promise<GroupRoleView> {
-  return mutateData((draft) => {
+  const { role: nextRole, userId } = await mutateData((draft) => {
     const role = draft.groupRoles.find(
       (r) => r.id === groupRoleId && r.panelId === panelId,
     );
     if (!role) {
       throw new Error("Group role not found in this panel.");
+    }
+    const panel = draft.panels.find((candidate) => candidate.id === panelId);
+    if (!panel) {
+      throw new Error("Panel not found.");
     }
 
     // 取消同面板内其他角色的 Leader 标记
@@ -1605,9 +1680,21 @@ export async function setGroupRoleLeader(
 
     role.isLeader = true;
     role.updatedAt = nowIso();
+    panel.updatedAt = role.updatedAt;
 
-    return groupRoleToView(role);
+    return {
+      role: groupRoleToView(role),
+      userId: panel.userId,
+    };
   });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId,
+    reason: "group_role_updated",
+  });
+
+  return nextRole;
 }
 
 /**
@@ -1620,17 +1707,33 @@ export async function unsetGroupRoleLeader(
   panelId: string,
   groupRoleId: string,
 ): Promise<GroupRoleView> {
-  return mutateData((draft) => {
+  const { role: nextRole, userId } = await mutateData((draft) => {
     const role = draft.groupRoles.find(
       (r) => r.id === groupRoleId && r.panelId === panelId,
     );
     if (!role) {
       throw new Error("Group role not found in this panel.");
     }
+    const panel = draft.panels.find((candidate) => candidate.id === panelId);
+    if (!panel) {
+      throw new Error("Panel not found.");
+    }
 
     role.isLeader = false;
     role.updatedAt = nowIso();
+    panel.updatedAt = role.updatedAt;
 
-    return groupRoleToView(role);
+    return {
+      role: groupRoleToView(role),
+      userId: panel.userId,
+    };
   });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId,
+    reason: "group_role_updated",
+  });
+
+  return nextRole;
 }

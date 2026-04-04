@@ -10,6 +10,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -31,6 +32,35 @@ import { PanelCard } from "./panel-card";
 import { PanelSidebarItem } from "./panel-sidebar-item";
 
 const ACTIVE_PANEL_STORAGE_KEY = "chatbot.active-panel-id";
+const PANELS_EVENT_REFRESH_DEBOUNCE_MS = 120;
+
+function mergePanelsWithLocalState(current: PanelView[], incoming: PanelView[]) {
+  const currentById = new Map(current.map((panel) => [panel.id, panel]));
+
+  return incoming.map((nextPanel) => {
+    const currentPanel = currentById.get(nextPanel.id);
+    if (!currentPanel) {
+      return nextPanel;
+    }
+
+    return {
+      ...nextPanel,
+      activeRunId: currentPanel.messagesLoaded
+        ? currentPanel.activeRunId ?? nextPanel.activeRunId
+        : nextPanel.activeRunId,
+      messageCount: currentPanel.messagesLoaded
+        ? currentPanel.messages.length
+        : nextPanel.messageCount,
+      latestMessagePreview: currentPanel.messagesLoaded
+        ? currentPanel.latestMessagePreview ?? nextPanel.latestMessagePreview
+        : nextPanel.latestMessagePreview,
+      messagesLoaded: currentPanel.messagesLoaded || nextPanel.messagesLoaded,
+      messages: currentPanel.messagesLoaded
+        ? currentPanel.messages
+        : nextPanel.messages,
+    };
+  });
+}
 
 /**
  * 应用主布局外壳。
@@ -53,6 +83,7 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
   const [createGroupDialog, setCreateGroupDialog] = useState<CreateGroupDialogConfig | null>(null);
   const [settingsDialog, setSettingsDialog] = useState<AppSettingsDialogConfig | null>(null);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const panelsRefreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setPanels(initialData.panels);
@@ -99,6 +130,40 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
     return payload.agents;
   }, []);
 
+  const refreshPanels = useCallback(async () => {
+    const url = new URL("/api/panels", window.location.origin);
+    url.searchParams.set("ts", Date.now().toString());
+
+    const response = await fetch(url.toString(), {
+      cache: "no-store",
+    }).catch(() => null);
+    if (!response?.ok) {
+      return;
+    }
+
+    const payload = (await response.json().catch(() => null)) as PanelView[] | null;
+    if (!Array.isArray(payload)) {
+      return;
+    }
+
+    setPanels((current) => mergePanelsWithLocalState(current, payload));
+  }, []);
+
+  const queuePanelsRefresh = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (panelsRefreshTimerRef.current) {
+      window.clearTimeout(panelsRefreshTimerRef.current);
+    }
+
+    panelsRefreshTimerRef.current = window.setTimeout(() => {
+      panelsRefreshTimerRef.current = null;
+      void refreshPanels();
+    }, PANELS_EVENT_REFRESH_DEBOUNCE_MS);
+  }, [refreshPanels]);
+
   useEffect(() => {
     // If we have initial agents from SSR, don't immediately refresh to avoid flickering.
     if (initialData.agents.length > 0) {
@@ -112,6 +177,19 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
       panels.some((panel) => panel.id === current) ? current : panels[0]?.id ?? null,
     );
   }, [panels]);
+
+  useEffect(() => {
+    const source = new EventSource("/api/panels/stream");
+    source.addEventListener("panel", queuePanelsRefresh);
+
+    return () => {
+      source.close();
+      if (panelsRefreshTimerRef.current) {
+        window.clearTimeout(panelsRefreshTimerRef.current);
+        panelsRefreshTimerRef.current = null;
+      }
+    };
+  }, [queuePanelsRefresh]);
 
   useEffect(() => {
     if (typeof window === "undefined") {

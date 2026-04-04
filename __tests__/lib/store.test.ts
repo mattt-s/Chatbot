@@ -23,6 +23,7 @@ vi.mock("@/lib/env", () => ({
   getStorageDir: () => "/tmp/test-storage",
   getUploadDir: () => "/tmp/test-storage/uploads",
   getDownloadDir: () => "/tmp/test-storage/downloads",
+  getVoiceDir: () => "/tmp/test-storage/voice",
   getDataFilePath: () => "/tmp/test-storage/app-data.json",
   getEnv: () => ({
     adminEmail: "admin@test.com",
