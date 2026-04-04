@@ -418,6 +418,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
       const role = groupRoles.find((r) => r.id === groupRoleId);
       void onRoleReplyFinal({
         panelId: panel.id,
+        panelTitle: panel.title,
         groupRoleId,
         runId: canonicalRunId,
         senderLabel: role?.title ?? "未知角色",

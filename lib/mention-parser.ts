@@ -152,6 +152,7 @@ function parseMentionLine(
  * 首次调用时会注入群组信息、消息规则、Leader 职责等提示词。
  *
  * @param {object} params - 构造参数
+ * @param {{ id: string; title: string }} [params.groupPanel] - 当前群组面板信息
  * @param {StoredGroupRole} params.targetRole - 目标角色
  * @param {StoredGroupRole[]} params.allRoles - 群组内所有角色
  * @param {{ type: "user" | "group-role"; name: string }} params.sender - 发送者信息
@@ -160,6 +161,7 @@ function parseMentionLine(
  * @returns {string} 构造好的消息文本
  */
 export function buildDispatchMessage(params: {
+  groupPanel?: { id: string; title: string };
   targetRole: StoredGroupRole;
   allRoles: StoredGroupRole[];
   sender: { type: "user" | "group-role"; name: string };
@@ -179,10 +181,13 @@ export function buildDispatchMessage(params: {
     const roleDesc = isLeader
       ? `你的角色名是「${params.targetRole.title}」，你是本群组的组长。`
       : `你的角色名是「${params.targetRole.title}」。`;
+    const groupLocation = params.groupPanel
+      ? `群组 ${params.groupPanel.title}（id: ${params.groupPanel.id}）`
+      : "一个群组";
 
     parts.push(
       `[群组信息]`,
-      `你正在一个群组中协作，${roleDesc}`,
+      `你正在${groupLocation} 中协作，${roleDesc}`,
       `群组内的其他成员：`,
       others,
       ``,

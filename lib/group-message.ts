@@ -96,6 +96,7 @@ export async function submitGroupMessage(
   try {
     await routeMessage({
       panelId: input.panel.id,
+      panelTitle: input.panel.title,
       senderType: "user",
       senderLabel: input.user.displayName,
       text: message,

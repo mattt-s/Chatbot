@@ -570,6 +570,7 @@ async function runGroupTaskReminderWatchdog(now: number) {
       // 即使 app 重启后 initializedRoles 丢失，也始终按非首次消息发送。
       const isFirstCall = false;
       const dispatchText = buildDispatchMessage({
+        groupPanel: { id: panel.id, title: panel.title },
         targetRole: leader,
         allRoles: groupRoles,
         sender: { type: "group-role", name: "系统提醒" },
@@ -752,6 +753,7 @@ async function dispatchToRole(params: {
  */
 export async function routeMessage(params: {
   panelId: string;
+  panelTitle?: string;
   senderType: "user" | "group-role";
   senderLabel: string;
   senderGroupRoleId?: string;
@@ -799,6 +801,9 @@ export async function routeMessage(params: {
       if (recovered) {
         const isFirstCall = !hasBeenInitialized(params.panelId, targetRole.id);
         const dispatchText = buildDispatchMessage({
+          groupPanel: params.panelTitle
+            ? { id: params.panelId, title: params.panelTitle }
+            : undefined,
           targetRole,
           allRoles: params.groupRoles,
           sender: { type: params.senderType, name: params.senderLabel },
@@ -844,6 +849,9 @@ export async function routeMessage(params: {
     } else {
       const isFirstCall = !hasBeenInitialized(params.panelId, targetRole.id);
       const dispatchText = buildDispatchMessage({
+        groupPanel: params.panelTitle
+          ? { id: params.panelId, title: params.panelTitle }
+          : undefined,
         targetRole,
         allRoles: params.groupRoles,
         sender: { type: params.senderType, name: params.senderLabel },
@@ -885,6 +893,7 @@ export async function routeMessage(params: {
  */
 export async function onRoleReplyFinal(params: {
   panelId: string;
+  panelTitle?: string;
   groupRoleId: string;
   runId: string;
   senderLabel: string;
@@ -914,6 +923,7 @@ export async function onRoleReplyFinal(params: {
   // 2. 路由该回复中的 @mention
   await routeMessage({
     panelId: params.panelId,
+    panelTitle: params.panelTitle,
     senderType: "group-role",
     senderLabel: params.senderLabel,
     senderGroupRoleId: params.groupRoleId,

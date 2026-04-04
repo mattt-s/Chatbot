@@ -181,6 +181,10 @@ describe("extractInstructionText", () => {
 describe("buildDispatchMessage", () => {
   it("includes group context on first call", () => {
     const result = buildDispatchMessage({
+      groupPanel: {
+        id: "panel-blog",
+        title: "Blog",
+      },
       targetRole: ANALYST,
       allRoles: ALL_ROLES,
       sender: { type: "user", name: "Alice" },
@@ -189,6 +193,7 @@ describe("buildDispatchMessage", () => {
     });
 
     expect(result).toContain("[群组信息]");
+    expect(result).toContain("你正在群组 Blog（id: panel-blog） 中协作");
     expect(result).toContain("分析师");
     expect(result).toContain("[消息规则]");
     expect(result).toContain("[来自 用户]:");
