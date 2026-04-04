@@ -6,6 +6,7 @@
  */
 "use client";
 
+import { memo } from "react";
 import type { KeyboardEvent } from "react";
 import Image from "next/image";
 import { getGroupTaskStateClassName, getGroupTaskStateLabel } from "@/lib/group-task";
@@ -27,16 +28,59 @@ import { truncateText } from "./chat-helpers";
  * @param props.onSelect - 选中回调
  * @param props.onDelete - 删除回调
  */
-export function PanelSidebarItem({
-  panel,
-  agentLabel,
-  agentEmoji,
-  agentAvatarUrl,
-  agents,
-  isActive,
-  onSelect,
-  onDelete,
-}: {
+function buildPreviewSource(panel: PanelView) {
+  const latestMessage = panel.messages[panel.messages.length - 1];
+  return (
+    latestMessage?.text ||
+    panel.latestMessagePreview ||
+    (latestMessage?.draft ? "正在生成回复..." : "")
+  );
+}
+
+function areSidebarGroupRolesEqual(prev: PanelView, next: PanelView) {
+  const prevRoles = Array.isArray(prev.groupRoles)
+    ? prev.groupRoles.filter((role) => role.enabled)
+    : [];
+  const nextRoles = Array.isArray(next.groupRoles)
+    ? next.groupRoles.filter((role) => role.enabled)
+    : [];
+
+  if (prevRoles.length !== nextRoles.length) {
+    return false;
+  }
+
+  return prevRoles.every((prevRole, index) => {
+    const nextRole = nextRoles[index];
+    return Boolean(nextRole) &&
+      prevRole.id === nextRole.id &&
+      prevRole.title === nextRole.title &&
+      prevRole.agentId === nextRole.agentId &&
+      prevRole.emoji === nextRole.emoji &&
+      prevRole.isLeader === nextRole.isLeader &&
+      prevRole.enabled === nextRole.enabled;
+  });
+}
+
+function arePanelSidebarItemPropsEqual(
+  prev: PanelSidebarItemProps,
+  next: PanelSidebarItemProps,
+) {
+  return (
+    prev.isActive === next.isActive &&
+    prev.agentLabel === next.agentLabel &&
+    prev.agentEmoji === next.agentEmoji &&
+    prev.agentAvatarUrl === next.agentAvatarUrl &&
+    prev.agents === next.agents &&
+    prev.panel.id === next.panel.id &&
+    prev.panel.title === next.panel.title &&
+    prev.panel.kind === next.panel.kind &&
+    prev.panel.taskState === next.panel.taskState &&
+    buildPreviewSource(prev.panel) === buildPreviewSource(next.panel) &&
+    areSidebarGroupRolesEqual(prev.panel, next.panel)
+  );
+}
+
+type PanelSidebarItemProps = {
   panel: PanelView;
   agentLabel: string;
   agentEmoji?: string | null;
@@ -45,7 +89,18 @@ export function PanelSidebarItem({
   isActive: boolean;
   onSelect: () => void;
   onDelete: () => void;
-}) {
+};
+
+function PanelSidebarItemImpl({
+  panel,
+  agentLabel,
+  agentEmoji,
+  agentAvatarUrl,
+  agents,
+  isActive,
+  onSelect,
+  onDelete,
+}: PanelSidebarItemProps) {
   const isGroup = panel.kind === "group";
   const cardToneClass = isActive
     ? "border-[#d8c7af] bg-[#f3ece2] text-[var(--ink)] shadow-[0_14px_30px_rgba(15,23,36,0.08)]"
@@ -57,11 +112,7 @@ export function PanelSidebarItem({
     ? "bg-[#ebe1d2] text-[var(--ink-soft)]"
     : "bg-[var(--paper-2)] text-[var(--ink-soft)]";
   const bodyTextClass = "text-[var(--ink-soft)]";
-  const latestMessage = panel.messages[panel.messages.length - 1];
-  const previewSource =
-    latestMessage?.text ||
-    panel.latestMessagePreview ||
-    (latestMessage?.draft ? "正在生成回复..." : "");
+  const previewSource = buildPreviewSource(panel);
   const previewText = previewSource
     ? truncateText(previewSource.replace(/\s+/g, " "), 76)
     : isGroup ? "群组尚无消息" : "还没有消息";
@@ -219,3 +270,8 @@ export function PanelSidebarItem({
     </div>
   );
 }
+
+export const PanelSidebarItem = memo(
+  PanelSidebarItemImpl,
+  arePanelSidebarItemPropsEqual,
+);
