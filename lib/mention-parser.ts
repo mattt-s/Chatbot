@@ -221,9 +221,13 @@ export function buildDispatchMessage(params: {
       `这里是你的回复正文。`,
       ``,
       `@角色名`,
-      `${GROUP_TASK_IN_PROGRESS_MARKER}`,
-      ``,
     );
+
+    if (isLeader) {
+      parts.push(`${GROUP_TASK_IN_PROGRESS_MARKER}`);
+    }
+
+    parts.push(``);
   }
 
   const senderLabel =

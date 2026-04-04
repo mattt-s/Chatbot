@@ -198,6 +198,8 @@ describe("buildDispatchMessage", () => {
     expect(result).toContain("撰稿人");
     // Should NOT include leader responsibilities for non-leader
     expect(result).not.toContain("[组长职责]");
+    expect(result).not.toContain("[TASK_IN_PROGRESS]");
+    expect(result).not.toContain("[TASK_COMPLETED]");
   });
 
   it("includes leader responsibilities for leader role", () => {
@@ -211,6 +213,7 @@ describe("buildDispatchMessage", () => {
 
     expect(result).toContain("[组长职责]");
     expect(result).toContain("你是本群组的组长");
+    expect(result).toContain("[TASK_IN_PROGRESS]");
   });
 
   it("omits group context on subsequent calls", () => {
