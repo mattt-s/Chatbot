@@ -150,3 +150,19 @@ flowchart TD
     V -->|是| W["系统内部提醒 leader 催办成员并做阶段总结"]
     W --> X["leader 输出 [TASK_IN_PROGRESS] 或 [TASK_COMPLETED]"]
 ```
+
+## TODO
+
+### 升级为结构化路由 Tool
+
+当前群内转发目标和任务状态都放在 assistant 回复末尾的文本 footer 控制块里，再由 app 解析 `@角色名` 与 `[TASK_IN_PROGRESS] / [TASK_COMPLETED]`。
+
+这个方案实现成本低，但本质仍是“自然语言正文 + 文本控制协议”复用同一输出通道，后续如果继续扩展更多控制字段，协议会越来越脆弱。
+
+后续更推荐在 `customchat` 插件内注册一个专用的群路由控制 tool，例如 `group_route`，让角色用结构化参数显式上报：
+
+- `targets`：下一跳角色列表
+- `taskState`：`idle / in_progress / completed`
+- `handoffReason`：可选，说明为什么转交给这些角色
+
+落地后，聊天正文只负责展示，群路由和任务状态只消费 tool 参数，前端默认隐藏这类控制 tool 的调用细节，从架构上避免 footer 文本协议冲突。

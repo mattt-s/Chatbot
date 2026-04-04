@@ -102,6 +102,24 @@ describe("parseTrailingMentions", () => {
     const result = parseTrailingMentions("test\n\n@分析师", [shortName, longName]);
     expect(result.some((r) => r.id === "r5")).toBe(true);
   });
+
+  it("parses mentions from footer block even when task marker appears after mentions", () => {
+    const result = parseTrailingMentions(
+      "请两位立即回传可执行方案：\n\n@分析师\n@撰稿人\n\n[TASK_IN_PROGRESS]",
+      ALL_ROLES,
+    );
+
+    expect(result.map((r) => r.id)).toEqual(["r2", "r3"]);
+  });
+
+  it("parses mentions from footer block even when task marker appears before mentions", () => {
+    const result = parseTrailingMentions(
+      "继续推进\n\n[TASK_IN_PROGRESS]\n@分析师 @撰稿人",
+      ALL_ROLES,
+    );
+
+    expect(result.map((r) => r.id)).toEqual(["r2", "r3"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -137,6 +155,22 @@ describe("extractInstructionText", () => {
   it("preserves @mentions in middle of text", () => {
     const text = "我告诉@PM这件事\n然后继续";
     expect(extractInstructionText(text)).toBe("我告诉@PM这件事\n然后继续");
+  });
+
+  it("removes trailing footer block containing both mentions and task marker", () => {
+    const text = [
+      "slug 唯一，公开路由 /p/{slug}",
+      "请两位立即回传可执行方案：",
+      "",
+      "@分析师",
+      "@撰稿人",
+      "",
+      "[TASK_IN_PROGRESS]",
+    ].join("\n");
+
+    expect(extractInstructionText(text, ALL_ROLES)).toBe(
+      "slug 唯一，公开路由 /p/{slug}\n请两位立即回传可执行方案：",
+    );
   });
 });
 

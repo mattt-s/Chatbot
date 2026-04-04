@@ -2,7 +2,7 @@
  * @module mention-parser
  * 群组消息 @mention 解析与消息构造模块。
  *
- * 提供纯函数：从文本末尾提取 @mention、剥离 @mention 行得到正文、
+ * 提供纯函数：从文本末尾 footer 控制块提取 @mention、剥离 footer 控制行得到正文、
  * 以及构造发送给角色的消息（含群组上下文注入）。
  */
 import {
@@ -22,7 +22,8 @@ export function escapeRegExp(str: string): string {
 
 /**
  * 从文本末尾提取 @mention 的角色列表。
- * 只检查最后 3 行，避免误匹配正文中提到的角色名。
+ * 从尾部向上扫描 footer 控制块，允许 @mention 行、任务状态标记行、空行混排；
+ * 一旦遇到第一行正文内容就停止，避免误匹配正文中提到的角色名。
  * 按角色名长度降序匹配，防止短名先匹配导致的歧义。
  *
  * @param {string} text - 包含末尾 @mention 的完整文本
@@ -51,11 +52,18 @@ export function parseTrailingMentions(
     }
 
     const lineMentions = parseMentionLine(current, enabledRoles);
+    if (lineMentions) {
+      trailingMentionLines.unshift(current);
+      continue;
+    }
+
+    if (isTaskStateMarkerLine(current)) {
+      continue;
+    }
+
     if (!lineMentions) {
       break;
     }
-
-    trailingMentionLines.unshift(current);
   }
 
   for (const line of trailingMentionLines) {
@@ -71,8 +79,8 @@ export function parseTrailingMentions(
 }
 
 /**
- * 去掉末尾 @mention 行，返回正文部分。
- * 从尾部逐行移除纯 @mention 行和空行。
+ * 去掉末尾 footer 控制块，返回正文部分。
+ * 从尾部逐行移除纯 @mention 行、任务状态标记行和空行。
  *
  * @param {string} text - 包含末尾 @mention 的完整文本
  * @returns {string} 去除末尾 @ 行后的正文
@@ -89,7 +97,7 @@ export function extractInstructionText(
     const isMentionLine = enabledRoles
       ? Boolean(parseMentionLine(last, enabledRoles))
       : /^(@\S+\s*)+$/.test(last);
-    if (isMentionLine || last === "") {
+    if (isMentionLine || isTaskStateMarkerLine(last) || last === "") {
       lines.pop();
     } else {
       break;
@@ -97,6 +105,14 @@ export function extractInstructionText(
   }
 
   return lines.join("\n").trim();
+}
+
+function isTaskStateMarkerLine(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed === GROUP_TASK_IN_PROGRESS_MARKER ||
+    trimmed === GROUP_TASK_COMPLETION_MARKER
+  );
 }
 
 function parseMentionLine(
@@ -172,10 +188,10 @@ export function buildDispatchMessage(params: {
       ``,
       `[消息规则]`,
       `1. 你收到的每条消息会标明来源：「用户」或「某个角色名」。`,
-      `2. 如果你需要其他成员协助，请在回复的末尾另起一行，写上 @角色名。`,
-      `3. 你的回复需要转交给某人时，也请在末尾写 @角色名。`,
-      `4. 如果你的回复是最终结果、不需要转发给任何人，则不要在末尾写 @。`,
-      `5. 完成其他成员交给你的任务后，务必在末尾 @对方，否则对方无法收到你的回复。`,
+      `2. 如果你需要其他成员协助，请在回复末尾的 footer 控制块里单独另起一行写 @角色名。`,
+      `3. 如果你的回复需要转交给多人，可以在 footer 控制块连续写多行 @角色名，或在同一行写多个 @角色名。`,
+      `4. 如果你的回复是最终结果、不需要转发给任何人，则 footer 控制块里不要写 @角色名。`,
+      `5. 完成其他成员交给你的任务后，务必在 footer 控制块 @对方，否则对方无法收到你的回复。`,
       `6. 你只能看到发给你的消息，无法直接看到其他成员之间的对话。`,
       `7. 对话务必简洁扼要，不要任何不必要的寒暄，接到工作任务立即开始执行，不要拖延。`,
       `8. 群成员之间需要共享文件时，直接给出文件的绝对路径，让接收方按该绝对路径访问文件即可。`,
@@ -192,9 +208,9 @@ export function buildDispatchMessage(params: {
         `2. 如果需要某个成员处理，在你的回复末尾 @该成员。`,
         `3. 如果消息是某个成员的任务完成汇报，理解内容后决定下一步行动。`,
         `4. 如果任务尚未完成，你要主动催促相关成员汇报进度，并给出阶段总结。`,
-        `5. 当群任务已经正式开始推进，或你判断接下来还需要继续协作推进时，在回复末尾另起一行输出 ${GROUP_TASK_IN_PROGRESS_MARKER}。`,
-        `6. 只有当整个群任务确实完成时，才在回复末尾另起一行输出 ${GROUP_TASK_COMPLETION_MARKER}。`,
-        `7. 同一条回复里绝对不要同时输出 ${GROUP_TASK_IN_PROGRESS_MARKER} 和 ${GROUP_TASK_COMPLETION_MARKER}。`,
+        `5. 当群任务已经正式开始推进，或你判断接下来还需要继续协作推进时，在 footer 控制块里单独另起一行输出 ${GROUP_TASK_IN_PROGRESS_MARKER}。`,
+        `6. 只有当整个群任务确实完成时，才在 footer 控制块里单独另起一行输出 ${GROUP_TASK_COMPLETION_MARKER}。`,
+        `7. footer 控制块中，@角色行 和任务状态标记行可以任意先后排列，但同一条回复里绝对不要同时输出 ${GROUP_TASK_IN_PROGRESS_MARKER} 和 ${GROUP_TASK_COMPLETION_MARKER}。`,
         `8. 如果你只是回答一个小问题、闲聊、补充说明，且不代表群任务进入或继续推进，就不要输出任何状态标记。`,
       );
     }
@@ -205,6 +221,7 @@ export function buildDispatchMessage(params: {
       `这里是你的回复正文。`,
       ``,
       `@角色名`,
+      `${GROUP_TASK_IN_PROGRESS_MARKER}`,
       ``,
     );
   }
