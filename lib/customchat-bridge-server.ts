@@ -3,9 +3,9 @@
  *
  * 在 App 侧启动 WebSocket 服务，接受来自 customchat 插件的连接。
  * 双向通信：
- * - Plugin → App：deliver（消息投递）
+ * - Plugin → App：deliver（消息投递）、app_rpc（管理类 RPC）
  * - App → Plugin：inbound（用户消息发送）
- * 支持心跳检测、token 鉴权、hello/ping/deliver/inbound 协议。
+ * 支持心跳检测、token 鉴权、hello/ping/deliver/app_rpc/inbound 协议。
  */
 import "server-only";
 
@@ -13,6 +13,7 @@ import crypto from "node:crypto";
 
 import type { WebSocket, WebSocketServer } from "ws";
 
+import { dispatchCustomChatAppRpc } from "@/lib/customchat-app-rpc";
 import { getEnv } from "@/lib/env";
 import { ingestCustomChatDelivery } from "@/lib/customchat-ingest";
 import { createLogger } from "@/lib/logger";
@@ -33,6 +34,14 @@ type BridgeEnvelope =
       type: "deliver";
       requestId: string;
       payload: unknown;
+    }
+  | {
+      type: "app_rpc";
+      requestId: string;
+      payload: {
+        method?: string;
+        params?: Record<string, unknown>;
+      };
     }
   | {
       type: "ack";
@@ -151,7 +160,7 @@ function clearPluginSocket() {
 // ── Envelope handler ────────────────────────────────────────────────
 
 /**
- * 处理收到的桥接协议信封：hello（握手）、ping（保活）、deliver（消息投递）、ack（inbound 回复）
+ * 处理收到的桥接协议信封：hello（握手）、ping（保活）、deliver（消息投递）、app_rpc（管理调用）、ack（inbound/rpc 回复）
  * @param {WebSocket} socket - 来源连接
  * @param {BridgeEnvelope} envelope - 解析后的协议信封
  */
@@ -206,6 +215,44 @@ async function handleEnvelope(socket: WebSocket, envelope: BridgeEnvelope) {
         requestId: envelope.requestId,
         ok: false,
         error: error instanceof Error ? error.message : "Bridge delivery failed.",
+      });
+    }
+    return;
+  }
+
+  if (envelope.type === "app_rpc") {
+    const method = envelope.payload?.method?.trim() || "";
+    const params = (envelope.payload?.params &&
+    typeof envelope.payload.params === "object"
+      ? envelope.payload.params
+      : {}) as Record<string, unknown>;
+
+    try {
+      if (!method) {
+        throw new Error("App RPC method is required.");
+      }
+      log.input("handleEnvelope", {
+        type: "app_rpc",
+        requestId: envelope.requestId,
+        method,
+      });
+      const result = await dispatchCustomChatAppRpc(method, params);
+      sendJson(socket, {
+        type: "ack",
+        requestId: envelope.requestId,
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      log.error("handleEnvelope", error, {
+        requestId: envelope.requestId,
+        method,
+      });
+      sendJson(socket, {
+        type: "ack",
+        requestId: envelope.requestId,
+        ok: false,
+        error: error instanceof Error ? error.message : "App RPC failed.",
       });
     }
     return;

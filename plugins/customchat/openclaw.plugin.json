@@ -6,6 +6,14 @@
     "customchat"
   ],
   "description": "Custom Chat messaging channel backed by the ChatBot app.",
+  "skills": [
+    "./skills"
+  ],
+  "contracts": {
+    "tools": [
+      "manage_group"
+    ]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

@@ -2,6 +2,7 @@ import { defineChannelPluginEntry } from "openclaw/plugin-sdk/core";
 import type { CustomChatEntryApi } from "./api-types.js";
 import { registerCustomChatBridgeService } from "./bridge-service.js";
 import { customChatPlugin } from "./channel.js";
+import { registerCustomChatGroupManagementTool } from "./group-management-tool.js";
 import {
   CUSTOMCHAT_PLUGIN_DESCRIPTION,
   CUSTOMCHAT_PLUGIN_ID,
@@ -18,5 +19,6 @@ export default defineChannelPluginEntry({
   plugin: customChatPlugin,
   registerFull(api: CustomChatEntryApi) {
     registerCustomChatBridgeService(api);
+    registerCustomChatGroupManagementTool(api);
   },
 });

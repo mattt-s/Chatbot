@@ -1245,6 +1245,119 @@ async function sendPortalDelivery(
   });
 }
 
+async function sendPortalRequestFrame(
+  accountConfig: AccountConfig,
+  frameType: "deliver" | "app_rpc",
+  requestId: string,
+  payload: unknown,
+  rejectionMessage: string,
+  timeoutAtMs = Date.now() + PORTAL_SEND_TIMEOUT_MS,
+) {
+  let attempt = 0;
+
+  while (Date.now() <= timeoutAtMs) {
+    try {
+      await ensurePortalSocket(accountConfig);
+      const socket = portalSocket;
+      if (!socket || socket.readyState !== socket.OPEN) {
+        throw new Error("customchat portal websocket not ready");
+      }
+
+      return await new Promise<unknown>((resolve, reject) => {
+        const handleMessage = (event: MessageEvent) => {
+          const raw =
+            typeof event.data === "string"
+              ? event.data
+              : Buffer.isBuffer(event.data)
+                ? event.data.toString("utf8")
+                : String(event.data);
+          let frame: JsonRecord;
+          try {
+            frame = JSON.parse(raw) as JsonRecord;
+          } catch {
+            return;
+          }
+
+          if (
+            typeof frame.requestId !== "string" ||
+            frame.requestId.trim() !== requestId
+          ) {
+            return;
+          }
+
+          socket.removeEventListener("message", handleMessage);
+          socket.removeEventListener("close", handleClose);
+          socket.removeEventListener("error", handleError);
+
+          if (frame.ok === true) {
+            resolve(frame.result ?? { ok: true });
+            return;
+          }
+
+          reject(
+            new Error(
+              typeof frame.error === "string" && frame.error.trim()
+                ? frame.error.trim()
+                : rejectionMessage,
+            ),
+          );
+        };
+
+        const handleClose = () => {
+          socket.removeEventListener("message", handleMessage);
+          socket.removeEventListener("close", handleClose);
+          socket.removeEventListener("error", handleError);
+          reject(new Error("customchat portal websocket closed during request"));
+        };
+
+        const handleError = () => {
+          socket.removeEventListener("message", handleMessage);
+          socket.removeEventListener("close", handleClose);
+          socket.removeEventListener("error", handleError);
+          reject(new Error("customchat portal websocket error during request"));
+        };
+
+        socket.addEventListener("message", handleMessage);
+        socket.addEventListener("close", handleClose);
+        socket.addEventListener("error", handleError);
+        socket.send(
+          JSON.stringify({
+            type: frameType,
+            requestId,
+            payload,
+          }),
+        );
+      });
+    } catch {
+      resetPortalSocket();
+      const delay =
+        PORTAL_RECONNECT_BACKOFF_MS[
+          Math.min(attempt, PORTAL_RECONNECT_BACKOFF_MS.length - 1)
+        ] ?? 4_000;
+      attempt += 1;
+      await sleep(delay);
+    }
+  }
+
+  throw new Error("customchat portal request timed out");
+}
+
+export async function sendPortalAppRpc(
+  method: string,
+  params: JsonRecord = {},
+) {
+  const accountConfig = await resolveDefaultAccountConfig();
+  const requestId = `app_rpc:${method}:${crypto.randomUUID()}`;
+  pluginLog("rpc", "sendPortalAppRpc", `→ ${method}`, { requestId });
+  return sendPortalRequestFrame(
+    accountConfig,
+    "app_rpc",
+    requestId,
+    { method, params },
+    `customchat app_rpc:${method} rejected`,
+  );
+}
+
 /**
  * 重置前端 App WebSocket 连接（关闭现有连接、清理状态）。
  */
@@ -1397,96 +1510,14 @@ function ensurePortalBridgeLoop() {
  * @throws 超时时抛出 Error
  */
 async function sendPortalEnvelope(item: PortalQueueItem) {
-  let attempt = 0;
-  while (Date.now() <= item.timeoutAtMs) {
-    try {
-      await ensurePortalSocket(item.accountConfig);
-      const socket = portalSocket;
-      if (!socket || socket.readyState !== socket.OPEN) {
-        throw new Error("customchat portal websocket not ready");
-      }
-
-      const result = await new Promise<unknown>((resolve, reject) => {
-        const requestId = item.requestId;
-        const handleMessage = (event: MessageEvent) => {
-          const raw =
-            typeof event.data === "string"
-              ? event.data
-              : Buffer.isBuffer(event.data)
-                ? event.data.toString("utf8")
-                : String(event.data);
-          let frame: JsonRecord;
-          try {
-            frame = JSON.parse(raw) as JsonRecord;
-          } catch {
-            return;
-          }
-
-          if (
-            typeof frame.requestId !== "string" ||
-            frame.requestId.trim() !== requestId
-          ) {
-            return;
-          }
-
-          socket.removeEventListener("message", handleMessage);
-          socket.removeEventListener("close", handleClose);
-          socket.removeEventListener("error", handleError);
-
-          if (frame.ok === true) {
-            resolve(frame.result ?? { ok: true });
-            return;
-          }
-
-          reject(
-            new Error(
-              typeof frame.error === "string" && frame.error.trim()
-                ? frame.error.trim()
-                : "customchat portal delivery rejected",
-            ),
-          );
-        };
-
-        const handleClose = () => {
-          socket.removeEventListener("message", handleMessage);
-          socket.removeEventListener("close", handleClose);
-          socket.removeEventListener("error", handleError);
-          reject(new Error("customchat portal websocket closed during delivery"));
-        };
-
-        const handleError = () => {
-          socket.removeEventListener("message", handleMessage);
-          socket.removeEventListener("close", handleClose);
-          socket.removeEventListener("error", handleError);
-          reject(new Error("customchat portal websocket error during delivery"));
-        };
-
-        socket.addEventListener("message", handleMessage);
-        socket.addEventListener("close", handleClose);
-        socket.addEventListener("error", handleError);
-        socket.send(
-          JSON.stringify({
-            type: "deliver",
-            requestId,
-            payload: item.payload,
-          }),
-        );
-      });
-
-      return result;
-    } catch {
-      resetPortalSocket();
-      const delay =
-        PORTAL_RECONNECT_BACKOFF_MS[
-          Math.min(attempt, PORTAL_RECONNECT_BACKOFF_MS.length - 1)
-        ] ?? 4_000;
-      attempt += 1;
-      await sleep(delay);
-      continue;
-    }
-  }
-
-  throw new Error("customchat portal delivery timed out");
+  return sendPortalRequestFrame(
+    item.accountConfig,
+    "deliver",
+    item.requestId,
+    item.payload,
+    "customchat portal delivery rejected",
+    item.timeoutAtMs,
+  );
 }
 
 /**

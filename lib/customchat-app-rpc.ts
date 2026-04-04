@@ -1,0 +1,347 @@
+/**
+ * @module customchat-app-rpc
+ * Plugin → App 管理类 RPC 分发器。
+ *
+ * 这条链路复用 customchat bridge WebSocket，不引入新的监听端口。
+ * 由插件侧自定义 tool 发起调用，App 侧以当前内置管理员身份执行群组管理动作。
+ */
+import "server-only";
+
+import { deleteProviderSession } from "@/lib/customchat-provider";
+import { resetInitializedRoles } from "@/lib/group-router";
+import {
+  createGroupRole,
+  createPanel,
+  ensureSeededAdminUser,
+  findGroupRoleById,
+  getPanelRecordForUser,
+  listGroupRoles,
+  listPanelsForUser,
+  removeGroupRole,
+  setGroupRoleLeader,
+  unsetGroupRoleLeader,
+  updateGroupRole,
+} from "@/lib/store";
+import type { GroupRoleView, PanelView, SessionUser } from "@/lib/types";
+import { toCustomChatGroupRoleTarget } from "@/lib/utils";
+
+type AppRpcParams = Record<string, unknown>;
+
+type GroupRoleInput = {
+  title: string;
+  agentId: string;
+  emoji: string | null;
+  isLeader: boolean;
+};
+
+function readTrimmedString(
+  params: AppRpcParams,
+  key: string,
+  options?: { required?: boolean },
+) {
+  const raw = params[key];
+  if (typeof raw !== "string") {
+    if (options?.required) {
+      throw new Error(`${key} is required.`);
+    }
+    return "";
+  }
+
+  const value = raw.trim();
+  if (!value && options?.required) {
+    throw new Error(`${key} is required.`);
+  }
+  return value;
+}
+
+function readOptionalBoolean(params: AppRpcParams, key: string) {
+  return typeof params[key] === "boolean" ? (params[key] as boolean) : undefined;
+}
+
+function readRoleInput(raw: unknown, index: number): GroupRoleInput {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`roles[${index}] must be an object.`);
+  }
+
+  const params = raw as AppRpcParams;
+  const title = readTrimmedString(params, "title", { required: true });
+  const agentId = readTrimmedString(params, "agentId", { required: true });
+  const emojiRaw = params.emoji;
+
+  return {
+    title,
+    agentId,
+    emoji: typeof emojiRaw === "string" ? emojiRaw.trim() || null : null,
+    isLeader: readOptionalBoolean(params, "isLeader") ?? false,
+  };
+}
+
+function readRoleInputs(params: AppRpcParams) {
+  const rawRoles = params.roles;
+  if (rawRoles == null) {
+    return [] as GroupRoleInput[];
+  }
+  if (!Array.isArray(rawRoles)) {
+    throw new Error("roles must be an array.");
+  }
+  return rawRoles.map((item, index) => readRoleInput(item, index));
+}
+
+async function resolveAdminUser(): Promise<SessionUser> {
+  return ensureSeededAdminUser();
+}
+
+function isGroupPanel(panel: PanelView) {
+  return panel.kind === "group";
+}
+
+async function requireGroupPanelByReference(
+  userId: string,
+  params: AppRpcParams,
+) {
+  const panelId = readTrimmedString(params, "panelId");
+  if (panelId) {
+    const panel = await getPanelRecordForUser(userId, panelId);
+    if ((panel.kind ?? "direct") !== "group") {
+      throw new Error("Panel is not a group panel.");
+    }
+    return panel;
+  }
+
+  const panelTitle = readTrimmedString(params, "panelTitle");
+  if (!panelTitle) {
+    throw new Error("panelId or panelTitle is required.");
+  }
+
+  const panels = (await listPanelsForUser(userId, { includeMessages: false }))
+    .filter(isGroupPanel)
+    .filter((panel) => panel.title.trim() === panelTitle);
+
+  if (panels.length === 0) {
+    throw new Error("Group panel not found.");
+  }
+  if (panels.length > 1) {
+    throw new Error("Multiple group panels matched. Please provide panelId.");
+  }
+
+  return getPanelRecordForUser(userId, panels[0].id);
+}
+
+async function requireGroupRoleByReference(
+  userId: string,
+  params: AppRpcParams,
+) {
+  const panel = await requireGroupPanelByReference(userId, params);
+  const roleId = readTrimmedString(params, "roleId");
+  const roleTitle = readTrimmedString(params, "roleTitle");
+
+  if (!roleId && !roleTitle) {
+    throw new Error("roleId or roleTitle is required.");
+  }
+
+  const roles = await listGroupRoles(panel.id);
+  const matched = roleId
+    ? roles.find((role) => role.id === roleId)
+    : roles.filter((role) => role.title.trim() === roleTitle);
+
+  if (Array.isArray(matched)) {
+    if (matched.length === 0) {
+      throw new Error("Group role not found.");
+    }
+    if (matched.length > 1) {
+      throw new Error("Multiple group roles matched. Please provide roleId.");
+    }
+    return { panel, role: matched[0] };
+  }
+
+  if (!matched) {
+    throw new Error("Group role not found.");
+  }
+
+  return { panel, role: matched };
+}
+
+async function buildAgentIdSet() {
+  const { loadAgentCatalog } = await import("@/lib/agents");
+  const agents = await loadAgentCatalog(true);
+  return new Set(agents.map((agent) => agent.id));
+}
+
+async function assertKnownAgentIds(roles: GroupRoleInput[]) {
+  const knownAgentIds = await buildAgentIdSet();
+  for (const role of roles) {
+    if (!knownAgentIds.has(role.agentId)) {
+      throw new Error(`Unknown agentId: ${role.agentId}`);
+    }
+  }
+}
+
+async function handleCreateGroup(user: SessionUser, params: AppRpcParams) {
+  const title = readTrimmedString(params, "title", { required: true });
+  const roles = readRoleInputs(params);
+  await assertKnownAgentIds(roles);
+
+  const panel = await createPanel(user.id, "", title, "group");
+  const createdRoles: GroupRoleView[] = [];
+  for (const role of roles) {
+    createdRoles.push(await createGroupRole({
+      panelId: panel.id,
+      agentId: role.agentId,
+      title: role.title,
+      emoji: role.emoji,
+      isLeader: role.isLeader,
+    }));
+  }
+  resetInitializedRoles(panel.id);
+
+  const nextPanel = await getPanelRecordForUser(user.id, panel.id);
+  return {
+    ok: true,
+    panel: nextPanel,
+    roles: createdRoles,
+  };
+}
+
+async function handleListGroups(user: SessionUser) {
+  const groups = (await listPanelsForUser(user.id, { includeMessages: false }))
+    .filter(isGroupPanel)
+    .map((panel) => ({
+      id: panel.id,
+      title: panel.title,
+      kind: panel.kind,
+      taskState: panel.taskState ?? "idle",
+      updatedAt: panel.updatedAt,
+      groupRoles: panel.groupRoles ?? [],
+    }));
+
+  return {
+    ok: true,
+    groups,
+  };
+}
+
+async function handleListAgents() {
+  const { loadAgentCatalog } = await import("@/lib/agents");
+  const agents = await loadAgentCatalog(true);
+  return {
+    ok: true,
+    agents,
+  };
+}
+
+async function handleAddGroupRole(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const roleInput = readRoleInput(params, 0);
+  await assertKnownAgentIds([roleInput]);
+
+  const role = await createGroupRole({
+    panelId: panel.id,
+    agentId: roleInput.agentId,
+    title: roleInput.title,
+    emoji: roleInput.emoji,
+    isLeader: roleInput.isLeader,
+  });
+  resetInitializedRoles(panel.id);
+
+  return {
+    ok: true,
+    panelId: panel.id,
+    role,
+  };
+}
+
+async function handleUpdateGroupRole(user: SessionUser, params: AppRpcParams) {
+  const { panel, role } = await requireGroupRoleByReference(user.id, params);
+  const nextAgentId = readTrimmedString(params, "agentId");
+  if (nextAgentId) {
+    await assertKnownAgentIds([
+      {
+        title: role.title,
+        agentId: nextAgentId,
+        emoji: role.emoji ?? null,
+        isLeader: role.isLeader ?? false,
+      },
+    ]);
+  }
+
+  const updatedRole = await updateGroupRole(role.id, {
+    title: readTrimmedString(params, "title") || undefined,
+    emoji: params.emoji === null
+      ? null
+      : typeof params.emoji === "string"
+        ? params.emoji.trim() || null
+        : undefined,
+    agentId: nextAgentId || undefined,
+    enabled: typeof params.enabled === "boolean" ? params.enabled : undefined,
+  });
+  resetInitializedRoles(panel.id);
+
+  return {
+    ok: true,
+    panelId: panel.id,
+    role: updatedRole,
+  };
+}
+
+async function handleSetGroupLeader(user: SessionUser, params: AppRpcParams) {
+  const { panel, role } = await requireGroupRoleByReference(user.id, params);
+  const nextRole = readOptionalBoolean(params, "enabled") === false
+    ? await unsetGroupRoleLeader(panel.id, role.id)
+    : await setGroupRoleLeader(panel.id, role.id);
+
+  return {
+    ok: true,
+    panelId: panel.id,
+    role: nextRole,
+  };
+}
+
+async function handleRemoveGroupRole(user: SessionUser, params: AppRpcParams) {
+  const { panel, role } = await requireGroupRoleByReference(user.id, params);
+  const storedRole = await findGroupRoleById(role.id);
+  await removeGroupRole(role.id);
+  resetInitializedRoles(panel.id);
+
+  if (storedRole) {
+    void deleteProviderSession({
+      panelId: panel.id,
+      agentId: storedRole.agentId,
+      target: toCustomChatGroupRoleTarget(panel.id, storedRole.id),
+    }).catch(() => null);
+  }
+
+  return {
+    ok: true,
+    panelId: panel.id,
+    roleId: role.id,
+  };
+}
+
+/**
+ * 分发 Plugin → App 管理类 RPC。
+ */
+export async function dispatchCustomChatAppRpc(
+  method: string,
+  params: AppRpcParams = {},
+) {
+  const user = await resolveAdminUser();
+
+  switch (method) {
+    case "group.create":
+      return handleCreateGroup(user, params);
+    case "group.list":
+      return handleListGroups(user);
+    case "agents.list":
+      return handleListAgents();
+    case "group_role.add":
+      return handleAddGroupRole(user, params);
+    case "group_role.update":
+      return handleUpdateGroupRole(user, params);
+    case "group_role.set_leader":
+      return handleSetGroupLeader(user, params);
+    case "group_role.remove":
+      return handleRemoveGroupRole(user, params);
+    default:
+      throw new Error(`Unknown App RPC method: ${method}`);
+  }
+}
