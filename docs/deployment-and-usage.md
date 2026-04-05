@@ -165,7 +165,46 @@ systemctl --user restart openclaw-gateway
 
 如果你的 OpenClaw 不是通过 systemd user service 管理，就按你自己的 Gateway 启动方式重启。
 
-### 7. 插件安装和 app 部署的关系
+### 7. 群组管理 AI 能力怎么生效
+
+当前仓库里的 `customchat` 插件除了 channel 能力，还内置了一个专门给角色使用的群组管理能力：
+
+- tool 名称：`manage_group`
+- skill 路径：`plugins/customchat/skills/manage-group/`
+
+它会随 `customchat` 插件一起安装和加载，不需要额外再装一个独立插件，也不需要新增配置项。
+
+当前这条 AI 能力只负责“群结构管理”，包括：
+
+- 创建群组
+- 查询已有群组
+- 查询可用 agent
+- 添加群成员
+- 更新成员
+- 设置或取消 leader
+- 删除群成员
+
+它**不负责**普通群消息的转发与协作流程。  
+也就是说，即使角色可以帮你“建群、拉人、设 leader”，群里的日常协作仍然走现有群聊 runtime：
+
+- `@角色` 路由
+- leader 兜底
+- `[TASK_IN_PROGRESS] / [TASK_COMPLETED]`
+- busy/idle 队列与 watchdog
+
+部署上你只需要保证两件事：
+
+1. OpenClaw 侧安装的是当前仓库里的 `plugins/customchat`
+2. 插件代码更新后重启 Gateway 让 skill/tool 重新加载
+
+如果插件是 `--link` 安装的，典型更新方式就是：
+
+```bash
+git pull
+systemctl --user restart openclaw-gateway
+```
+
+### 8. 插件安装和 app 部署的关系
 
 这里要特别注意：
 
@@ -385,6 +424,14 @@ npm run start
 群组里的每个角色都可以处理自己负责的任务。  
 例如：`产品经理`、`分析师`、`撰稿人`、`Leader` 分工协作。
 
+这里要区分两种能力：
+
+- **群管理能力**：让角色帮你建群、拉成员、设 leader
+- **群协作能力**：让群里的角色处理任务、转发消息、汇总结果
+
+当前版本已经支持前者，但两者是分开的。  
+也就是说，角色可以帮你把群结构搭起来，但普通群消息仍然按照下文的路由规则运行，不会因为有了 `manage_group` 就自动改成新的对话协议。
+
 #### 2. 显式 `@角色` 路由
 
 当消息里带有 `@角色名` 时，系统会把消息路由到对应角色。
@@ -428,6 +475,25 @@ leader 可以继续分派任务、催办成员、汇总阶段结果。
 
 - 对单个忙碌太久的角色做 watchdog 检查
 - 当全员 idle 但任务仍未完成时，自动提醒 leader 催办和汇总，并明确要求它输出 `[TASK_IN_PROGRESS]` 或 `[TASK_COMPLETED]`
+
+#### 7. 角色可协助做群结构管理
+
+当前已经支持在角色聊天里要求 agent：
+
+- 创建一个新群
+- 往群里添加某些角色
+- 设置某个角色为 leader
+- 查询已有群和成员信息
+
+这一类操作底层走的是隐藏的 `manage_group` tool，而不是正文消息协议。
+
+现阶段它的边界是：
+
+- 只负责“群创建 / 成员管理 / leader 管理”
+- 不负责“普通消息路由 / 任务状态上报 / 正文转发”
+
+所以如果你看到角色可以说“我已帮你建好 Blog 群并加上 PM/RD/QA”，这是群管理能力；  
+而后续在 Blog 群里继续通过 `@RD`、leader 汇总、任务推进，这还是群协作 runtime 的职责。
 
 ### 群组聊天怎么用
 
