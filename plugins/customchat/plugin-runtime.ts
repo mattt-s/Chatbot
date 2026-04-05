@@ -87,6 +87,7 @@ import {
   ensureCustomChatSubscriberLoop,
 } from "./subscriber-service.js";
 import {
+  abortGatewayManagedSession,
   abortGatewaySession,
   deleteGatewaySession,
   fetchGatewayChatHistory,
@@ -465,17 +466,35 @@ export async function abortCustomChatSession(
     remembered?.runIds.at(-1) ||
     null;
 
-  await abortGatewaySession(sessionKey, runId);
+  const chatAbortPayload = asJsonRecord(
+    await abortGatewaySession(sessionKey, runId).catch(() => null),
+  );
+  const chatAbortConfirmed =
+    chatAbortPayload.ok !== false &&
+    (chatAbortPayload.aborted === true ||
+      (Array.isArray(chatAbortPayload.runIds) && chatAbortPayload.runIds.length > 0));
 
-  let verified = false;
-  if (runId) {
-    try {
-      await waitForGatewayRun(runId, 3_000);
-      verified = true;
-    } catch {
-      verified = false;
-    }
+  let noActiveRun = false;
+  let sessionAbortConfirmed = false;
+  if (!chatAbortConfirmed) {
+    // OpenClaw 偶尔会出现旧 runId 仍然 wait timeout / session index 仍显示 running，
+    // 但官方 sessions.abort 已经判断该 session 没有 active run 的状态。
+    // 这种情况下我们把它视为“当前没有活跃执行”，让上层释放本地 busy 状态，
+    // 避免角色永久卡在 aborting。
+    const sessionAbortPayload = asJsonRecord(
+      await abortGatewayManagedSession(sessionKey).catch(() => null),
+    );
+    const sessionAbortStatus =
+      typeof sessionAbortPayload.status === "string"
+        ? sessionAbortPayload.status.trim().toLowerCase()
+        : "";
+    noActiveRun = sessionAbortStatus === "no-active-run";
+    sessionAbortConfirmed =
+      typeof sessionAbortPayload.abortedRunId === "string" &&
+      sessionAbortPayload.abortedRunId.trim().length > 0;
   }
+
+  const verified = chatAbortConfirmed || sessionAbortConfirmed || noActiveRun;
 
   return {
     ok: true,
@@ -485,6 +504,7 @@ export async function abortCustomChatSession(
     queued: !verified,
     runtimeTracked: Boolean(runtimeTracked),
     verified,
+    noActiveRun,
   };
 }
 let gatewayRecoveryInFlight = false;

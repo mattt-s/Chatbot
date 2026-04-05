@@ -95,7 +95,7 @@ describe("group-router", () => {
     vi.clearAllMocks();
     vi.resetModules();
     mockInspectProviderSession.mockResolvedValue({ exists: true, terminal: false });
-    mockAbortProviderRun.mockResolvedValue({ ok: true });
+    mockAbortProviderRun.mockResolvedValue({ ok: true, verified: true });
     mockSendInboundToPlugin.mockResolvedValue({
       runId: `run-${Date.now()}`,
       status: "ok",
@@ -331,6 +331,34 @@ describe("group-router", () => {
           runId: "run-analyst-error",
         }),
       ).resolves.not.toThrow();
+    });
+  });
+
+  describe("abortGroupRoleRun", () => {
+    it("sessions.abort 回 no-active-run 时直接释放为空闲", async () => {
+      const { abortGroupRoleRun, routeMessage, getGroupRoleRuntimeStatuses } = await import("@/lib/group-router");
+
+      mockSendInboundToPlugin.mockResolvedValueOnce({ runId: "run-stuck", status: "ok" });
+      mockAbortProviderRun.mockResolvedValueOnce({
+        ok: true,
+        verified: true,
+        noActiveRun: true,
+      });
+
+      await routeMessage({
+        panelId: "p-grp",
+        senderType: "user",
+        senderLabel: "用户",
+        text: "先让分析师处理\n\n@分析师",
+        groupRoles: ALL_ROLES,
+      });
+
+      const result = await abortGroupRoleRun("p-grp", "r-analyst");
+      expect(result).toEqual({
+        status: "aborted",
+        runId: "run-stuck",
+      });
+      expect(getGroupRoleRuntimeStatuses("p-grp").get("r-analyst")).toBeUndefined();
     });
   });
 });

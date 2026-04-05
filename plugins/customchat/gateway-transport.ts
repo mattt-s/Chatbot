@@ -145,6 +145,10 @@ export async function abortGatewaySession(sessionKey: string, runId?: string | n
   });
 }
 
+export async function abortGatewayManagedSession(key: string) {
+  return runGatewayCall("sessions.abort", { key });
+}
+
 export async function deleteGatewaySession(key: string, deleteTranscript: boolean) {
   return runGatewayCall("sessions.delete", { key, deleteTranscript });
 }

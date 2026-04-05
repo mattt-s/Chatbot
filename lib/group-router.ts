@@ -323,12 +323,22 @@ async function abortBusyRole(panelId: string, groupRoleId: string, state: BusyRo
 
   try {
     const target = toCustomChatGroupRoleTarget(panelId, groupRoleId);
-    await abortProviderRun({
+    const providerAbort = await abortProviderRun({
       panelId,
       agentId: current.agentId,
       runId: current.runId,
       target,
     });
+
+    if (providerAbort?.verified) {
+      // 这里的 verified 不仅包含“chat.abort 命中 active run”，也包含
+      // “官方 sessions.abort 返回 no-active-run” 的兜底场景。
+      // 后者对应 Gateway bookkeeping 不一致：旧 run 看起来还在 running，
+      // 但官方控制面已经确认当前 session 没有活跃执行，可安全释放本地 busy 状态。
+      const groupRoles = await listGroupRoles(panelId);
+      await releaseRoleAndFlushQueue(panelId, groupRoleId, current.runId, groupRoles);
+    }
+
     log.debug("watchdog.abort", {
       panelId,
       groupRoleId,
