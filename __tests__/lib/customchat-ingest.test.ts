@@ -12,7 +12,6 @@ const mockSetPanelActiveRun = vi.fn();
 const mockSetGroupPanelTaskState = vi.fn();
 const mockPersistDownloadedBuffer = vi.fn();
 const mockListGroupRoles = vi.fn();
-const mockListPanelMessages = vi.fn();
 
 vi.mock("@/lib/store", () => ({
   findPanelRecordByCustomChatTarget: (...args: unknown[]) =>
@@ -24,7 +23,6 @@ vi.mock("@/lib/store", () => ({
   setGroupPanelTaskState: (...args: unknown[]) => mockSetGroupPanelTaskState(...args),
   persistDownloadedBuffer: (...args: unknown[]) => mockPersistDownloadedBuffer(...args),
   listGroupRoles: (...args: unknown[]) => mockListGroupRoles(...args),
-  listPanelMessages: (...args: unknown[]) => mockListPanelMessages(...args),
 }));
 
 // Mock events
@@ -103,7 +101,6 @@ describe("customchat-ingest", () => {
       storagePath: "/storage/downloads/att-1",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
-    mockListPanelMessages.mockResolvedValue([]);
   });
 
   describe("customChatDeliverySchema", () => {
@@ -367,37 +364,12 @@ describe("customchat-ingest", () => {
       expect(mockOnRoleReplyFinal).not.toHaveBeenCalled();
     });
 
-    it("suppresses noisy bridge NO text before storage and skips leader forwarding", async () => {
+    it("keeps runtimeSteps but suppresses bare NO text before leader forwarding", async () => {
       mockFindPanelRecordByCustomChatTarget.mockResolvedValue({
         ...mockPanel,
         kind: "group",
       });
       mockLookupRoleByRunId.mockReturnValue({ panelId: "p1", groupRoleId: "role-dd" });
-      mockListPanelMessages.mockResolvedValue([
-        {
-          id: "delivered",
-          role: "assistant",
-          text: "豆豆的头像 🐶",
-          createdAt: "2026-01-01T00:00:05.000Z",
-          attachments: [
-            {
-              id: "att-1",
-              name: "file.png",
-              mimeType: "image/png",
-              size: 100,
-              kind: "image",
-              url: "/api/uploads/att-1",
-            },
-          ],
-          runId: "customchat:delivery",
-          state: "final",
-          draft: false,
-          errorMessage: null,
-          stopReason: null,
-          usage: null,
-          runtimeSteps: [],
-        },
-      ]);
 
       const { ingestCustomChatDelivery } = await import("@/lib/customchat-ingest");
 
@@ -410,7 +382,7 @@ describe("customchat-ingest", () => {
           {
             stream: "tool",
             ts: 1000,
-            data: { tool: "message", title: "message", description: "sent", status: "done" },
+            data: { kind: "exec", title: "Exec", description: "codex exec ...", status: "running" },
           },
         ],
       });

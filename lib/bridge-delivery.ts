@@ -46,58 +46,17 @@ export function shouldHideBridgeDeliveryNoiseText(
   messages: BridgeDeliveryLikeMessage[] | undefined,
   index: number | undefined,
 ) {
+  void messages;
+  void index;
+
   if (message.role !== "assistant" || message.attachments.length > 0) {
     return false;
   }
 
-  if (!hasMessageToolRuntimeStep(message.runtimeSteps)) {
+  if (message.runtimeSteps.length === 0) {
     return false;
   }
 
   const trimmedMessageText = message.text.trim();
-  if (!BRIDGE_DELIVERY_NOISE_TEXT_PATTERN.test(trimmedMessageText)) {
-    return false;
-  }
-
-  if (!messages || typeof index !== "number" || index < 0 || index >= messages.length) {
-    return false;
-  }
-
-  const currentTs = Date.parse(message.createdAt);
-  if (!Number.isFinite(currentTs)) {
-    return false;
-  }
-
-  return messages.some((candidate, candidateIndex) => {
-    if (candidateIndex === index || candidate.role !== "assistant" || candidate.id === message.id) {
-      return false;
-    }
-
-    const candidateTs = Date.parse(candidate.createdAt);
-    if (
-      !Number.isFinite(candidateTs) ||
-      Math.abs(candidateTs - currentTs) > BRIDGE_DELIVERY_RESULT_WINDOW_MS
-    ) {
-      return false;
-    }
-
-    if (candidate.runId === message.runId) {
-      return false;
-    }
-
-    const trimmedCandidateText = candidate.text.trim();
-    if (trimmedCandidateText === "" && candidate.attachments.length === 0) {
-      return false;
-    }
-
-    if (candidate.attachments.length > 0) {
-      return true;
-    }
-
-    if (candidate.runId?.startsWith("customchat:")) {
-      return true;
-    }
-
-    return candidate.runtimeSteps.length === 0 && trimmedCandidateText.length > 2;
-  });
+  return BRIDGE_DELIVERY_NOISE_TEXT_PATTERN.test(trimmedMessageText);
 }

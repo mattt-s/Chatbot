@@ -30,7 +30,6 @@ import {
   findMessageByRunId,
   findPanelRecordByCustomChatTarget,
   listGroupRoles,
-  listPanelMessages,
   persistDownloadedBuffer,
   setAssistantMessageSessionMeta,
   setGroupPanelTaskState,
@@ -144,6 +143,10 @@ function isStandaloneNoNoise(params: {
     params.attachmentCount === 0 &&
     params.runtimeStepCount === 0
   );
+}
+
+function isBareNoText(text: string) {
+  return /^no$/i.test(text.trim());
 }
 
 /**
@@ -309,31 +312,21 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
     }
   }
 
-  if (
-    text &&
-    incomingRuntimeSteps.length > 0 &&
-    parsed.state === "final"
-  ) {
-    const panelMessages = await listPanelMessages(panel.id);
-    const candidateCreatedAt =
-      existingMessage?.createdAt ??
-      panelMessages[panelMessages.length - 1]?.createdAt ??
-      new Date().toISOString();
-    const candidateMessage = {
-      id: existingMessage?.id ?? `${runId}:candidate`,
-      role: "assistant" as const,
-      text,
-      createdAt: candidateCreatedAt,
-      runId,
-      attachments: [] as StoredAttachment[],
-      runtimeSteps: incomingRuntimeSteps,
-    };
+  if (text && parsed.state === "final") {
     shouldSuppressBridgeNoiseText = shouldHideBridgeDeliveryNoiseText(
-      candidateMessage,
-      [...panelMessages, candidateMessage],
-      panelMessages.length,
+      {
+        id: existingMessage?.id ?? `${runId}:candidate`,
+        role: "assistant",
+        text,
+        createdAt: existingMessage?.createdAt ?? new Date().toISOString(),
+        runId,
+        attachments: [] as StoredAttachment[],
+        runtimeSteps: incomingRuntimeSteps,
+      },
+      undefined,
+      undefined,
     );
-    if (shouldSuppressBridgeNoiseText) {
+    if (shouldSuppressBridgeNoiseText || isBareNoText(displayText)) {
       displayText = "";
     }
   }
@@ -443,7 +436,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
       existingTerminalState: existingTerminalState ?? "null",
       textLen: text.length,
     });
-    if (parsed.state === "final" && shouldSuppressBridgeNoiseText) {
+    if (parsed.state === "final" && (shouldSuppressBridgeNoiseText || !displayText)) {
       const groupRoles = await listGroupRoles(panel.id);
       void onRoleReplyTerminalWithoutRouting({
         panelId: panel.id,
@@ -451,7 +444,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
         runId: canonicalRunId,
         groupRoles,
       });
-    } else if (parsed.state === "final" && text && existingTerminalState !== "final") {
+    } else if (parsed.state === "final" && displayText && existingTerminalState !== "final") {
       const groupRoles = await listGroupRoles(panel.id);
       const role = groupRoles.find((r) => r.id === groupRoleId);
       void onRoleReplyFinal({
@@ -460,7 +453,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
         groupRoleId,
         runId: canonicalRunId,
         senderLabel: role?.title ?? "未知角色",
-        replyText: text,
+        replyText: displayText,
         groupRoles,
       });
     } else if (
