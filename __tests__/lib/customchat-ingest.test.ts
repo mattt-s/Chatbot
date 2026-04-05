@@ -225,6 +225,51 @@ describe("customchat-ingest", () => {
       expect(result.reason).toBe("empty placeholder ignored");
     });
 
+    it("ignores standalone NO noise without storing or routing", async () => {
+      mockFindPanelRecordByCustomChatTarget.mockResolvedValue({
+        ...mockPanel,
+        kind: "group",
+      });
+      mockLookupRoleByRunId.mockReturnValue({ panelId: "p1", groupRoleId: "role-dd" });
+
+      const { ingestCustomChatDelivery } = await import("@/lib/customchat-ingest");
+
+      const result = await ingestCustomChatDelivery({
+        target: "group:direct:p1:role:role-dd",
+        runId: "run-no",
+        text: "NO",
+        state: "final",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.ignored).toBe(true);
+      expect(result.reason).toBe("standalone NO ignored");
+      expect(mockUpsertAssistantMessage).not.toHaveBeenCalled();
+      expect(mockPublishCustomChatEvent).not.toHaveBeenCalled();
+      expect(mockOnRoleReplyFinal).not.toHaveBeenCalled();
+      expect(mockOnRoleReplyTerminalWithoutRouting).not.toHaveBeenCalled();
+      expect(mockSetPanelActiveRun).toHaveBeenCalledWith("p1", null);
+    });
+
+    it("keeps a normal negative answer with explanation", async () => {
+      const { ingestCustomChatDelivery } = await import("@/lib/customchat-ingest");
+
+      await ingestCustomChatDelivery({
+        target: "panel:p1",
+        runId: "run-negative",
+        text: "No, because tag API is not ready yet.",
+        state: "final",
+      });
+
+      expect(mockUpsertAssistantMessage).toHaveBeenCalledWith(
+        "p1",
+        expect.objectContaining({
+          runId: "run-negative",
+          text: "No, because tag API is not ready yet.",
+        }),
+      );
+    });
+
     it("strips NO_REPLY and thinking tags from text", async () => {
       const { ingestCustomChatDelivery } = await import("@/lib/customchat-ingest");
 

@@ -130,6 +130,23 @@ function normalizeAssistantTextForStorage(text: string) {
 }
 
 /**
+ * 判断一条回复是否为“纯 NO 噪音”。
+ * 仅拦截 bare "NO" / "no" 这类无上下文、无附件、无 runtime step 的占位回复，
+ * 避免误伤带解释的正常否定答复（例如 "No, because ..."）。
+ */
+function isStandaloneNoNoise(params: {
+  text: string;
+  attachmentCount: number;
+  runtimeStepCount: number;
+}) {
+  return (
+    /^no$/i.test(params.text.trim()) &&
+    params.attachmentCount === 0 &&
+    params.runtimeStepCount === 0
+  );
+}
+
+/**
  * 将投递中的运行时步骤转换为存储格式
  * @param {string} runId - 所属运行 ID
  * @param {z.infer<typeof customChatRuntimeStepSchema>[]} steps - 原始运行时步骤
@@ -212,6 +229,27 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
   const existingTerminalState = existingMessage?.state ?? null;
   const text = normalizeAssistantTextForStorage(parsed.text ?? "");
   const incomingRuntimeSteps = toStoredRuntimeSteps(runId, parsed.runtimeSteps);
+
+  if (
+    isStandaloneNoNoise({
+      text,
+      attachmentCount: attachments.length,
+      runtimeStepCount: incomingRuntimeSteps.length,
+    }) &&
+    !existingMessage
+  ) {
+    if (parsed.state !== "delta") {
+      await setPanelActiveRun(panel.id, null).catch(() => null);
+    }
+    return {
+      ok: true,
+      ignored: true,
+      reason: "standalone NO ignored",
+      panelId: panel.id,
+      runId,
+      sessionKey: panel.sessionKey,
+    };
+  }
 
   // Guard: skip empty deliveries that would create blank bubbles.
   if (!text && attachments.length === 0 && incomingRuntimeSteps.length === 0 && !existingMessage) {
