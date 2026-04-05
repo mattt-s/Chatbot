@@ -219,6 +219,7 @@ describe("buildDispatchMessage", () => {
     expect(result).toContain("[组长职责]");
     expect(result).toContain("你是本群组的组长");
     expect(result).toContain("[TASK_IN_PROGRESS]");
+    expect(result).toContain("manage_group_plan");
   });
 
   it("omits group context on subsequent calls", () => {

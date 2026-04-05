@@ -120,6 +120,19 @@ export interface StoredMessage {
 /** 面板类型：direct=一对一对话, group=群组 */
 export type PanelKind = "direct" | "group";
 export type GroupTaskState = "idle" | "in_progress" | "completed";
+export type GroupPlanItemStatus = "pending" | "in_progress" | "done" | "blocked";
+
+export interface GroupPlanItem {
+  title: string;
+  status: GroupPlanItemStatus;
+}
+
+export interface GroupPlan {
+  summary: string;
+  items: GroupPlanItem[];
+  updatedAt: string;
+  updatedByLabel?: string | null;
+}
 
 /** 存储层：聊天面板（对话会话） */
 export interface StoredPanel {
@@ -138,6 +151,8 @@ export interface StoredPanel {
   taskState?: GroupTaskState;
   /** 群任务状态最近一次变化时间，仅群组使用 */
   taskStateChangedAt?: string;
+  /** 群计划，仅群组使用 */
+  groupPlan?: GroupPlan | null;
   /** 用户角色显示名 */
   userRoleName?: string;
   /** 助手角色显示名 */
@@ -268,6 +283,8 @@ export interface PanelView {
   kind: PanelKind;
   /** 群任务状态，仅 kind="group" 时有效 */
   taskState?: GroupTaskState;
+  /** 群计划，仅 kind="group" 时有效 */
+  groupPlan?: GroupPlan | null;
   userRoleName: string;
   assistantRoleName: string;
   /** 当前活跃运行 ID */

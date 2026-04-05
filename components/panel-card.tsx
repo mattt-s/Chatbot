@@ -33,6 +33,7 @@ import { ConfirmDialog } from "./confirm-dialog";
 import type { ConfirmDialogConfig } from "./confirm-dialog";
 import { CreateGroupRoleDialog } from "./create-group-role-dialog";
 import type { CreateGroupRoleDialogConfig } from "./create-group-role-dialog";
+import { GroupPlanDialog } from "./group-plan-dialog";
 import { ImageViewer } from "./image-viewer";
 import { ManageGroupRolesDialog } from "./manage-group-roles-dialog";
 import type { ManageGroupRolesDialogConfig } from "./manage-group-roles-dialog";
@@ -123,6 +124,7 @@ export function PanelCard({
   const [manageGroupRolesDialog, setManageGroupRolesDialog] = useState<ManageGroupRolesDialogConfig | null>(null);
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [createGroupRoleResetToken, setCreateGroupRoleResetToken] = useState(0);
+  const [groupPlanDialogOpen, setGroupPlanDialogOpen] = useState(false);
   const [panelMessagesReady, setPanelMessagesReady] = useState(
     panel.messagesLoaded && (panel.messageCount === 0 || panel.messages.length > 0),
   );
@@ -250,6 +252,7 @@ export function PanelCard({
       sessionKey: panel.sessionKey,
       kind: panel.kind,
       taskState: panel.taskState,
+      groupPlan: panel.groupPlan,
       userRoleName: panel.userRoleName,
       assistantRoleName: panel.assistantRoleName,
       createdAt: panel.createdAt,
@@ -261,6 +264,7 @@ export function PanelCard({
       panel.createdAt,
       panel.id,
       panel.kind,
+      panel.groupPlan,
       panel.sessionKey,
       panel.taskState,
       panel.title,
@@ -630,6 +634,7 @@ export function PanelCard({
         }}
         onAddGroupRole={isGroupPanel ? () => setCreateGroupRoleDialog({ open: true, panelId: panel.id }) : undefined}
         onManageGroupRoles={isGroupPanel ? () => setManageGroupRolesDialog({ open: true, panelId: panel.id, roles: groupRoles }) : undefined}
+        onOpenGroupPlan={isGroupPanel ? () => setGroupPlanDialogOpen(true) : undefined}
         onSelectTaskState={isGroupPanel ? (selection) => { void patchPanel({ taskStateSelection: selection }); } : undefined}
       />
 
@@ -696,6 +701,12 @@ export function PanelCard({
             onDeleteRole={handleDeleteGroupRole}
             onToggleLeader={handleToggleLeader}
             onAbortRole={handleAbortGroupRole}
+          />
+          <GroupPlanDialog
+            open={groupPlanDialogOpen}
+            title={panel.title}
+            plan={panel.groupPlan}
+            onClose={() => setGroupPlanDialogOpen(false)}
           />
         </>
       ) : null}

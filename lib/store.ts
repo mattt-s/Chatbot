@@ -21,6 +21,9 @@ import type {
   AppData,
   AppSettingsView,
   AttachmentView,
+  GroupPlan,
+  GroupPlanItem,
+  GroupPlanItemStatus,
   GroupTaskState,
   GroupRoleView,
   MessageView,
@@ -61,6 +64,64 @@ const EMPTY_DATA: AppData = {
 const DEFAULT_USER_ROLE_NAME = "我";
 const DEFAULT_ASSISTANT_ROLE_NAME = "助手";
 
+function normalizeGroupPlanItemStatus(
+  value: string | null | undefined,
+): GroupPlanItemStatus {
+  switch (value) {
+    case "in_progress":
+    case "done":
+    case "blocked":
+      return value;
+    default:
+      return "pending";
+  }
+}
+
+function sanitizeGroupPlan(raw: unknown): GroupPlan | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+
+  const input = raw as Record<string, unknown>;
+  const summary = typeof input.summary === "string" ? input.summary.trim() : "";
+  const rawItems = Array.isArray(input.items) ? input.items : [];
+  const items = rawItems
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return null;
+      }
+      const record = item as Record<string, unknown>;
+      const title = typeof record.title === "string" ? record.title.trim() : "";
+      if (!title) {
+        return null;
+      }
+      return {
+        title,
+        status: normalizeGroupPlanItemStatus(
+          typeof record.status === "string" ? record.status : undefined,
+        ),
+      } satisfies GroupPlanItem;
+    })
+    .filter((item): item is GroupPlanItem => Boolean(item));
+
+  if (!summary && items.length === 0) {
+    return null;
+  }
+
+  return {
+    summary,
+    items,
+    updatedAt:
+      typeof input.updatedAt === "string" && input.updatedAt.trim()
+        ? input.updatedAt
+        : nowIso(),
+    updatedByLabel:
+      typeof input.updatedByLabel === "string"
+        ? input.updatedByLabel.trim() || null
+        : null,
+  };
+}
+
 let mutationQueue = Promise.resolve();
 
 /** In-memory cache – avoids re-reading/parsing the JSON file on every operation. */
@@ -100,6 +161,10 @@ async function readData(): Promise<AppData> {
   const raw = await fs.readFile(getDataFilePath(), "utf8");
   const parsed = raw ? (JSON.parse(raw) as AppData) : EMPTY_DATA;
   // Backward compat: older data files may lack groupRoles
+  parsed.panels = (parsed.panels ?? []).map((panel) => ({
+    ...panel,
+    groupPlan: sanitizeGroupPlan(panel.groupPlan),
+  }));
   parsed.groupRoles = parsed.groupRoles ?? [];
   parsed.settings = parsed.settings ?? {};
   parsed.messages = (parsed.messages ?? []).map((message) => ({
@@ -338,6 +403,7 @@ function panelToView(
     sessionKey: panel.sessionKey,
     kind: panelKind,
     taskState: panelKind === "group" ? normalizeGroupTaskState(panel.taskState) : undefined,
+    groupPlan: panelKind === "group" ? sanitizeGroupPlan(panel.groupPlan) : undefined,
     userRoleName: panel.userRoleName?.trim() || DEFAULT_USER_ROLE_NAME,
     assistantRoleName:
       panel.assistantRoleName?.trim() || DEFAULT_ASSISTANT_ROLE_NAME,
@@ -408,6 +474,7 @@ function createPanelRecord(
     kind,
     taskState: kind === "group" ? "idle" : undefined,
     taskStateChangedAt: kind === "group" ? createdAt : undefined,
+    groupPlan: kind === "group" ? null : undefined,
     userRoleName: DEFAULT_USER_ROLE_NAME,
     assistantRoleName: DEFAULT_ASSISTANT_ROLE_NAME,
     activeRunId: null,
@@ -1458,6 +1525,91 @@ export async function setGroupPanelTaskState(
       { groupRoles: draft.groupRoles },
     );
   });
+}
+
+export async function updateGroupPanelPlan(
+  panelId: string,
+  input: {
+    summary?: string;
+    items?: GroupPlanItem[];
+    updatedByLabel?: string | null;
+  },
+): Promise<PanelView> {
+  const { panel: nextPanel, userId } = await mutateData((draft) => {
+    const panel = draft.panels.find((candidate) => candidate.id === panelId);
+    if (!panel || (panel.kind ?? "direct") !== "group") {
+      throw new Error("Group panel not found.");
+    }
+
+    const updatedAt = nowIso();
+    const summary = typeof input.summary === "string" ? input.summary.trim() : "";
+    const items = Array.isArray(input.items)
+      ? input.items
+          .map((item) => ({
+            title: item.title.trim(),
+            status: normalizeGroupPlanItemStatus(item.status),
+          }))
+          .filter((item) => item.title.length > 0)
+      : [];
+
+    panel.groupPlan = {
+      summary,
+      items,
+      updatedAt,
+      updatedByLabel:
+        typeof input.updatedByLabel === "string"
+          ? input.updatedByLabel.trim() || null
+          : null,
+    };
+    panel.updatedAt = updatedAt;
+
+    return {
+      panel: panelToView(
+        panel,
+        draft.messages.filter((message) => message.panelId === panel.id),
+        { groupRoles: draft.groupRoles },
+      ),
+      userId: panel.userId,
+    };
+  });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId,
+    reason: "panel_updated",
+  });
+
+  return nextPanel;
+}
+
+export async function clearGroupPanelPlan(panelId: string): Promise<PanelView> {
+  const { panel: nextPanel, userId } = await mutateData((draft) => {
+    const panel = draft.panels.find((candidate) => candidate.id === panelId);
+    if (!panel || (panel.kind ?? "direct") !== "group") {
+      throw new Error("Group panel not found.");
+    }
+
+    const updatedAt = nowIso();
+    panel.groupPlan = null;
+    panel.updatedAt = updatedAt;
+
+    return {
+      panel: panelToView(
+        panel,
+        draft.messages.filter((message) => message.panelId === panel.id),
+        { groupRoles: draft.groupRoles },
+      ),
+      userId: panel.userId,
+    };
+  });
+
+  publishDashboardPanelEvent({
+    userId,
+    panelId,
+    reason: "panel_updated",
+  });
+
+  return nextPanel;
 }
 
 export async function listInProgressGroupPanels(): Promise<StoredPanel[]> {

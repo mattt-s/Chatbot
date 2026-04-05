@@ -11,6 +11,9 @@ const MANAGE_GROUP_TOOL_SCHEMA = {
         "list_agents",
         "list_groups",
         "create_group",
+        "delete_group",
+        "get_group_task_state",
+        "send_group_message",
         "add_group_role",
         "update_group_role",
         "set_group_leader",
@@ -30,6 +33,10 @@ const MANAGE_GROUP_TOOL_SCHEMA = {
     title: {
       type: "string",
       description: "创建群组时的群名称，或新增/更新角色时的角色名。",
+    },
+    message: {
+      type: "string",
+      description: "发送到群里的消息正文。群内角色会把它视为用户发来的消息。",
     },
     agentId: {
       type: "string",
@@ -105,6 +112,31 @@ function normalizeAppRpcPayload(params: Record<string, unknown>) {
           roles: Array.isArray(params.roles) ? params.roles : [],
         },
       };
+    case "delete_group":
+      return {
+        method: "group.delete",
+        params: {
+          panelId: readString(params, "panelId"),
+          panelTitle: readString(params, "panelTitle"),
+        },
+      };
+    case "get_group_task_state":
+      return {
+        method: "group.get",
+        params: {
+          panelId: readString(params, "panelId"),
+          panelTitle: readString(params, "panelTitle"),
+        },
+      };
+    case "send_group_message":
+      return {
+        method: "group.message",
+        params: {
+          panelId: readString(params, "panelId"),
+          panelTitle: readString(params, "panelTitle"),
+          message: readString(params, "message"),
+        },
+      };
     case "add_group_role":
       return {
         method: "group_role.add",
@@ -174,7 +206,8 @@ export function registerCustomChatGroupManagementTool(api: CustomChatToolApi) {
     label: "Manage Group",
     description:
       "Create and manage CustomChat groups and group roles in the ChatBot app. " +
-      "Use this for creating a new group, adding/removing roles, setting leader, or listing groups/agents.",
+      "Use this for creating or deleting groups, checking group task state, " +
+      "sending a user message into a group, adding/removing roles, setting leader, or listing groups/agents.",
     parameters: MANAGE_GROUP_TOOL_SCHEMA,
     execute: async (_toolCallId, rawParams) => {
       const { method, params } = normalizeAppRpcPayload(rawParams);

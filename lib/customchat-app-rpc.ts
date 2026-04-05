@@ -8,10 +8,13 @@
 import "server-only";
 
 import { deleteProviderSession } from "@/lib/customchat-provider";
+import { submitGroupMessage } from "@/lib/group-message";
 import { resetInitializedRoles } from "@/lib/group-router";
 import {
   createGroupRole,
   createPanel,
+  clearGroupPanelPlan,
+  deletePanel,
   ensureSeededAdminUser,
   findGroupRoleById,
   getPanelRecordForUser,
@@ -20,9 +23,15 @@ import {
   removeGroupRole,
   setGroupRoleLeader,
   unsetGroupRoleLeader,
+  updateGroupPanelPlan,
   updateGroupRole,
 } from "@/lib/store";
-import type { GroupRoleView, PanelView, SessionUser } from "@/lib/types";
+import type {
+  GroupPlanItem,
+  GroupRoleView,
+  PanelView,
+  SessionUser,
+} from "@/lib/types";
 import { toCustomChatGroupRoleTarget } from "@/lib/utils";
 
 type AppRpcParams = Record<string, unknown>;
@@ -85,6 +94,32 @@ function readRoleInputs(params: AppRpcParams) {
     throw new Error("roles must be an array.");
   }
   return rawRoles.map((item, index) => readRoleInput(item, index));
+}
+
+function readPlanItems(params: AppRpcParams): GroupPlanItem[] {
+  const rawItems = params.items;
+  if (rawItems == null) {
+    return [];
+  }
+  if (!Array.isArray(rawItems)) {
+    throw new Error("items must be an array.");
+  }
+
+  return rawItems.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`items[${index}] must be an object.`);
+    }
+    const record = item as AppRpcParams;
+    const title = readTrimmedString(record, "title", { required: true });
+    const status = readTrimmedString(record, "status") || "pending";
+    if (!["pending", "in_progress", "done", "blocked"].includes(status)) {
+      throw new Error(`items[${index}].status is invalid.`);
+    }
+    return {
+      title,
+      status: status as GroupPlanItem["status"],
+    };
+  });
 }
 
 async function resolveAdminUser(): Promise<SessionUser> {
@@ -212,11 +247,127 @@ async function handleListGroups(user: SessionUser) {
       taskState: panel.taskState ?? "idle",
       updatedAt: panel.updatedAt,
       groupRoles: panel.groupRoles ?? [],
+      groupPlan: panel.groupPlan ?? null,
     }));
 
   return {
     ok: true,
     groups,
+  };
+}
+
+async function buildGroupDetails(userId: string, panelId: string) {
+  const panel = await getPanelRecordForUser(userId, panelId);
+  const groupRoles = await listGroupRoles(panelId);
+  return {
+    id: panel.id,
+    title: panel.title,
+    kind: panel.kind,
+    taskState: panel.taskState ?? "idle",
+    taskStateChangedAt: panel.taskStateChangedAt ?? null,
+    updatedAt: panel.updatedAt,
+    groupRoles,
+    groupPlan: panel.groupPlan ?? null,
+  };
+}
+
+async function handleGetGroup(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  return {
+    ok: true,
+    group: await buildGroupDetails(user.id, panel.id),
+  };
+}
+
+async function handleDeleteGroup(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const roles = await listGroupRoles(panel.id);
+
+  await deletePanel(user.id, panel.id);
+  resetInitializedRoles(panel.id);
+
+  await Promise.allSettled(
+    roles.map((role) =>
+      deleteProviderSession({
+        panelId: panel.id,
+        agentId: role.agentId,
+        target: toCustomChatGroupRoleTarget(panel.id, role.id),
+      })
+    ),
+  );
+
+  return {
+    ok: true,
+    panelId: panel.id,
+    title: panel.title,
+    removedRoleIds: roles.map((role) => role.id),
+  };
+}
+
+async function handleSendGroupMessage(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const message = readTrimmedString(params, "message", { required: true });
+  const result = await submitGroupMessage({
+    user,
+    panel,
+    message,
+    files: [],
+  });
+
+  return {
+    ok: true,
+    panelId: panel.id,
+    title: panel.title,
+    taskState: panel.taskState ?? "idle",
+    userMessage: result.userMessage,
+  };
+}
+
+async function handleGetGroupPlan(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const group = await buildGroupDetails(user.id, panel.id);
+  return {
+    ok: true,
+    panelId: panel.id,
+    title: panel.title,
+    taskState: group.taskState,
+    groupPlan: group.groupPlan,
+  };
+}
+
+async function handleUpdateGroupPlan(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const summary = readTrimmedString(params, "summary");
+  const items = readPlanItems(params);
+  const updatedByLabel = readTrimmedString(params, "updatedByLabel");
+  if (!summary && items.length === 0) {
+    throw new Error("summary or items is required.");
+  }
+
+  const nextPanel = await updateGroupPanelPlan(panel.id, {
+    summary,
+    items,
+    updatedByLabel: updatedByLabel || null,
+  });
+
+  return {
+    ok: true,
+    panelId: panel.id,
+    title: panel.title,
+    taskState: nextPanel.taskState ?? "idle",
+    groupPlan: nextPanel.groupPlan ?? null,
+  };
+}
+
+async function handleClearGroupPlan(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const nextPanel = await clearGroupPanelPlan(panel.id);
+  return {
+    ok: true,
+    panelId: panel.id,
+    title: panel.title,
+    taskState: nextPanel.taskState ?? "idle",
+    groupPlan: null,
   };
 }
 
@@ -329,6 +480,18 @@ export async function dispatchCustomChatAppRpc(
   switch (method) {
     case "group.create":
       return handleCreateGroup(user, params);
+    case "group.delete":
+      return handleDeleteGroup(user, params);
+    case "group.get":
+      return handleGetGroup(user, params);
+    case "group.message":
+      return handleSendGroupMessage(user, params);
+    case "group_plan.get":
+      return handleGetGroupPlan(user, params);
+    case "group_plan.update":
+      return handleUpdateGroupPlan(user, params);
+    case "group_plan.clear":
+      return handleClearGroupPlan(user, params);
     case "group.list":
       return handleListGroups(user);
     case "agents.list":

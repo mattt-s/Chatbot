@@ -67,4 +67,54 @@ describe("registerCustomChatGroupManagementTool", () => {
       enabled: true,
     });
   });
+
+  it("把 delete_group action 翻译成 group.delete app_rpc", async () => {
+    const { registerCustomChatGroupManagementTool } = await import(
+      "@/plugins/customchat/group-management-tool"
+    );
+    const registerTool = vi.fn();
+
+    registerCustomChatGroupManagementTool({ registerTool });
+
+    const tool = registerTool.mock.calls[0][0];
+    await tool.execute("call-3", {
+      action: "delete_group",
+      panelId: "panel-1",
+    });
+
+    expect(mockSendPortalAppRpc).toHaveBeenCalledWith("group.delete", {
+      panelId: "panel-1",
+      panelTitle: "",
+    });
+  });
+
+  it("把 get_group_task_state 和 send_group_message 翻译成对应 app_rpc", async () => {
+    const { registerCustomChatGroupManagementTool } = await import(
+      "@/plugins/customchat/group-management-tool"
+    );
+    const registerTool = vi.fn();
+
+    registerCustomChatGroupManagementTool({ registerTool });
+
+    const tool = registerTool.mock.calls[0][0];
+    await tool.execute("call-4", {
+      action: "get_group_task_state",
+      panelTitle: "博客开发群",
+    });
+    await tool.execute("call-5", {
+      action: "send_group_message",
+      panelTitle: "博客开发群",
+      message: "请同步一下最新进展",
+    });
+
+    expect(mockSendPortalAppRpc).toHaveBeenNthCalledWith(1, "group.get", {
+      panelId: "",
+      panelTitle: "博客开发群",
+    });
+    expect(mockSendPortalAppRpc).toHaveBeenNthCalledWith(2, "group.message", {
+      panelId: "",
+      panelTitle: "博客开发群",
+      message: "请同步一下最新进展",
+    });
+  });
 });
