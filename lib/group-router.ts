@@ -769,10 +769,15 @@ export async function routeMessage(params: {
   senderGroupRoleId?: string;
   text: string;
   dispatchInstructionText?: string;
+  explicitMentionRoleIds?: string[];
   groupRoles: StoredGroupRole[];
 }) {
   // 1. 解析末尾 @mention
-  const mentions = parseTrailingMentions(params.text, params.groupRoles);
+  // 群角色终态消息在 ingest 入库前会先剥离 footer 控制块；此时若仍需按原始 @ 路由，
+  // 必须优先使用 ingest 已解析好的 mentionedGroupRoleIds，不能只依赖正文重解析。
+  const mentions = params.explicitMentionRoleIds?.length
+    ? params.groupRoles.filter((role) => params.explicitMentionRoleIds?.includes(role.id))
+    : parseTrailingMentions(params.text, params.groupRoles);
   const instruction =
     params.dispatchInstructionText ??
     extractInstructionText(params.text, params.groupRoles);
@@ -908,6 +913,7 @@ export async function onRoleReplyFinal(params: {
   runId: string;
   senderLabel: string;
   replyText: string;
+  mentionedGroupRoleIds?: string[];
   groupRoles: StoredGroupRole[];
 }) {
   log.debug("onRoleReplyFinal", {
@@ -938,6 +944,7 @@ export async function onRoleReplyFinal(params: {
     senderLabel: params.senderLabel,
     senderGroupRoleId: params.groupRoleId,
     text: params.replyText,
+    explicitMentionRoleIds: params.mentionedGroupRoleIds,
     groupRoles: params.groupRoles,
   });
 

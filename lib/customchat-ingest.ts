@@ -454,6 +454,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
         runId: canonicalRunId,
         senderLabel: role?.title ?? "未知角色",
         replyText: displayText,
+        mentionedGroupRoleIds,
         groupRoles,
       });
     } else if (

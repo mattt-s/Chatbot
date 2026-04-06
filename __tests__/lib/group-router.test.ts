@@ -301,6 +301,26 @@ describe("group-router", () => {
       );
     });
 
+    it("leader 回复正文已剥离 footer 时，仍使用入库 mention 元数据路由", async () => {
+      const { onRoleReplyFinal } = await import("@/lib/group-router");
+      await onRoleReplyFinal({
+        panelId: "p-grp",
+        groupRoleId: "r-pm",
+        runId: "run-leader-final",
+        senderLabel: "PM",
+        replyText: "请分析师继续处理这部分。",
+        mentionedGroupRoleIds: ["r-analyst"],
+        groupRoles: ALL_ROLES,
+      });
+
+      expect(mockSendInboundToPlugin).toHaveBeenCalledTimes(1);
+      expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: "group:direct:p-grp:role:r-analyst",
+        }),
+      );
+    });
+
     it("回复无 @ 则兜底给 Leader", async () => {
       const { onRoleReplyFinal } = await import("@/lib/group-router");
       await onRoleReplyFinal({
