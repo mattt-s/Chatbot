@@ -1952,6 +1952,13 @@ async function recoverTrackedRuns() {
         forgetTrackedRun(trackedRun.runId);
         continue;
       }
+
+      // 机制级防御：针对刚刚创建（<5s）且尚未接收到任何真实事件流的 Run，
+      // 强行禁止做历史记录回填（避免因 OpenClaw 尚未把最新 user 消息落库而匹配到上文）。
+      if (Date.now() - trackedRun.createdAtMs < 5000 && trackedRun.sequence === 0) {
+        continue;
+      }
+
       await reconcileTrackedRun(accountConfig, trackedRun).catch(() => null);
     }
   } finally {
@@ -2694,9 +2701,6 @@ async function processInboundPayload(parsed: InboundRequestPayload) {
     expectedSessionKey: launched.expectedSessionKey,
   });
   ensureGatewaySubscriber();
-  void recoverTrackedRuns().catch((error) => {
-    console.error("[customchat] tracked run recovery failed", error);
-  });
 
   return {
     ok: true,
