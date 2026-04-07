@@ -17,6 +17,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { GatewayClient } from "openclaw/plugin-sdk/gateway-runtime";
 
 import {
   type JsonRecord,
@@ -49,7 +50,6 @@ import {
   extractRunId,
   extractTextFromMessagePayload,
   isDeliveryMirrorMessage,
-  extractLatestAssistantTextForCurrentTurn,
   extractCurrentTurnMessages,
   sessionShowsAbortedLastRun,
   parseGatewayWaitStatus,
@@ -58,7 +58,6 @@ import {
   readAuthorizationToken,
   buildInboundAgentMessage,
   base64UrlEncode,
-  buildDeviceAuthPayloadV3,
 } from "./utils.js";
 import type { CustomChatHttpRouteApi, CustomChatLegacyActivateApi } from "./api-types.js";
 import {
@@ -72,6 +71,7 @@ import {
   getCustomChatRuntimeStatusSummary,
   hasRuntimeTerminalState,
   markCustomChatServiceBoot,
+  markGatewaySubscriberLoopStarted,
   recordGatewaySubscriberConnected,
   recordGatewaySubscriberError,
 } from "./runtime-store.js";
@@ -82,10 +82,7 @@ import type {
   CustomChatSessionStatus,
   TrackedRun,
 } from "./runtime-types.js";
-import {
-  ensureCustomChatRecoveryLoop,
-  ensureCustomChatSubscriberLoop,
-} from "./subscriber-service.js";
+import { ensureCustomChatRecoveryLoop } from "./subscriber-service.js";
 import {
   abortGatewayManagedSession,
   abortGatewaySession,
@@ -249,6 +246,7 @@ type PortalQueueItem = {
 type GatewayDeviceIdentity = {
   deviceId: string;
   publicKey: string;
+  publicKeyPem: string;
   privateKeyPem: string;
   platform: string;
   deviceFamily?: string;
@@ -276,7 +274,7 @@ const GATEWAY_SUBSCRIBER_CONNECT_TIMEOUT_MS = 5_000;
 const GATEWAY_SUBSCRIBER_START_DELAY_MS = 1_500;
 
 let cachedGatewayDeviceIdentity: GatewayDeviceIdentity | null | undefined;
-const { trackedRuns, pendingRpcRequests } = customChatRuntimeStore;
+const { trackedRuns } = customChatRuntimeStore;
 
 function resolveTargetFromControlParams(input: CustomChatControlParams) {
   return normalizeChannelTarget(input.target || `channel:${input.panelId || ""}`);
@@ -1001,6 +999,7 @@ async function readJsonRequest(req: IncomingMessage, maxBytes = 25 * 1024 * 1024
 
 let cachedDefaultAccountConfig: AccountConfig | null = null;
 let cachedInboundToken: string | null = null;
+let cachedGatewayAuthToken: string | null = null;
 
 /**
  * 解析默认账户配置，带模块级缓存。
@@ -1023,6 +1022,29 @@ async function resolveDefaultAccountConfig(): Promise<AccountConfig> {
     // Config file unreadable — fall through to let normalizeAccountConfig throw with a clear message
   }
   return normalizeAccountConfig({}, "default");
+}
+
+/**
+ * 解析 Gateway 连接需要的共享 token（gateway.auth.mode=token 时）。
+ * 这个 token 和 device token 是两回事：前者是网关的“门票”，后者是设备身份令牌。
+ * 插件订阅连接需要同时携带两者（如果网关开启了 token auth）。
+ */
+async function resolveGatewayAuthToken(): Promise<string> {
+  if (cachedGatewayAuthToken !== null) {
+    return cachedGatewayAuthToken;
+  }
+  try {
+    const configPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
+    const raw = JSON.parse(await fs.readFile(configPath, "utf8"));
+    const token =
+      typeof raw?.gateway?.auth?.token === "string" ? raw.gateway.auth.token.trim() : "";
+    const resolvedToken = token || "";
+    cachedGatewayAuthToken = resolvedToken;
+    return resolvedToken;
+  } catch {
+    cachedGatewayAuthToken = "";
+    return "";
+  }
 }
 
 
@@ -1105,6 +1127,7 @@ async function loadGatewayDeviceIdentity(): Promise<GatewayDeviceIdentity | null
     cachedGatewayDeviceIdentity = {
       deviceId,
       publicKey: publicKeyRawBase64UrlFromPem(publicKeyPem),
+      publicKeyPem,
       privateKeyPem,
       platform:
         (typeof identity.platform === "string" && identity.platform.trim()) ||
@@ -1694,9 +1717,46 @@ async function backfillTrackedRunFromHistory(
   const historyMessages = Array.isArray(historyRecord.messages)
     ? historyRecord.messages
     : [];
-  const currentTurnMessages = extractCurrentTurnMessages(historyMessages);
-  const latestText = extractLatestAssistantTextForCurrentTurn(historyMessages);
-  if (latestText) {
+  const latestUserTimestamp = historyMessages.reduce((latest, candidate) => {
+    const messageRecord = asJsonRecord(candidate);
+    const role =
+      typeof messageRecord.role === "string"
+        ? messageRecord.role.trim()
+        : typeof messageRecord.kind === "string"
+          ? messageRecord.kind.trim()
+          : "";
+    if (role !== "user") {
+      return latest;
+    }
+    const timestamp =
+      typeof messageRecord.timestamp === "number" && Number.isFinite(messageRecord.timestamp)
+        ? messageRecord.timestamp
+        : 0;
+    return Math.max(latest, timestamp);
+  }, 0);
+  const historyMatchesTrackedRun =
+    latestUserTimestamp > 0 &&
+    latestUserTimestamp >= trackedRun.createdAtMs - 10_000;
+  const currentTurnMessages = historyMatchesTrackedRun
+    ? extractCurrentTurnMessages(historyMessages)
+    : [];
+  const latestText = currentTurnMessages
+    .map((candidate) => {
+      const messageRecord = asJsonRecord(candidate);
+      const role =
+        typeof messageRecord.role === "string"
+          ? messageRecord.role.trim()
+          : typeof messageRecord.kind === "string"
+            ? messageRecord.kind.trim()
+            : "";
+      return role === "assistant" && !isDeliveryMirrorMessage(messageRecord)
+        ? extractTextFromMessagePayload(candidate)
+        : "";
+    })
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  if (historyMatchesTrackedRun && latestText) {
     trackedRun.latestAssistantText = latestText;
   }
 
@@ -1723,6 +1783,8 @@ async function backfillTrackedRunFromHistory(
   trackedRun.lastHistoryErrorMessage = lastHistoryErrorMessage;
   trackedRun.lastHistoryStopReason = lastHistoryStopReason;
   const historyFingerprint = JSON.stringify({
+    historyMatchesTrackedRun,
+    latestUserTimestamp,
     count: currentTurnMessages.length,
     lastMessageRole,
     lastMessageTimestamp,
@@ -2242,202 +2304,74 @@ async function handleTrackedGatewayChatEvent(payload: JsonRecord) {
 }
 
 /**
- * 建立一次 Gateway WebSocket 订阅连接。
- * 处理认证挑战（Ed25519 签名）、连接确认、事件分发。
- * 连接成功后将事件路由到 handleTrackedGatewayChatEvent / handleTrackedGatewayAgentEvent。
- * 连接关闭时 Promise resolve（不会 reject），由外层循环重连。
+ * 启动基于官方 GatewayClient 的订阅连接。
+ * 这样可以直接复用宿主 OpenClaw 当前版本的握手、签名和自动重连逻辑，
+ * 避免插件自己手写协议细节导致的版本兼容问题。
  */
-async function connectGatewaySubscriberOnce() {
+async function startGatewaySubscriberClient() {
+  if (customChatRuntimeStore.activeGatewayClient) {
+    return customChatRuntimeStore.activeGatewayClient;
+  }
+
   const gatewayIdentity = await loadGatewayDeviceIdentity();
   if (!gatewayIdentity) {
     throw new Error("OpenClaw device identity is missing on the gateway host.");
   }
 
-  const ws = new WebSocket(resolveGatewayWsUrl());
-  const connectRequestId = `connect:customchat:${crypto.randomUUID()}`;
-  const authToken = gatewayIdentity.deviceToken || "";
-  const clientId = "cli";
-  const clientMode = "cli";
-  const role = "operator";
+  const gatewayAuthToken = await resolveGatewayAuthToken();
   const scopes = ["operator.admin", "operator.read", "operator.write"];
-
-  return new Promise<void>((resolve) => {
-    let started = false;
-    let settled = false;
-    const connectTimeout = globalThis.setTimeout(() => {
-      if (!started) {
-        console.error("[customchat] gateway subscriber connect timed out before start");
-        closeAndResolve();
-      }
-    }, GATEWAY_SUBSCRIBER_CONNECT_TIMEOUT_MS);
-
-    const closeAndResolve = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      globalThis.clearTimeout(connectTimeout);
-      if (customChatRuntimeStore.activeGatewayWebSocket === ws) {
-        customChatRuntimeStore.activeGatewayWebSocket = null;
-        for (const [id, req] of pendingRpcRequests) {
-          globalThis.clearTimeout(req.timeout);
-          req.reject(new Error(`Gateway WebSocket closed (id: ${id}).`));
-        }
-        pendingRpcRequests.clear();
-      }
-      try {
-        ws.close();
-      } catch {
-        // Ignore close failures.
-      }
-      resolve();
-    };
-
-    ws.addEventListener("error", () => {
-      if (!started) {
-        recordGatewaySubscriberError("gateway subscriber websocket error before start");
-        console.error("[customchat] gateway subscriber websocket error before start");
-        closeAndResolve();
-      }
-    });
-
-    ws.addEventListener("close", () => {
-      closeAndResolve();
-    });
-
-    ws.addEventListener("message", (event) => {
+  const client = new GatewayClient({
+    url: resolveGatewayWsUrl(),
+    token: gatewayAuthToken || undefined,
+    role: "operator",
+    scopes,
+    mode: "cli",
+    clientName: "cli",
+    clientDisplayName: "Custom Chat Plugin",
+    clientVersion: "1.0.0",
+    platform: gatewayIdentity.platform,
+    deviceFamily: gatewayIdentity.deviceFamily,
+    deviceIdentity: {
+      deviceId: gatewayIdentity.deviceId,
+      publicKeyPem: gatewayIdentity.publicKeyPem,
+      privateKeyPem: gatewayIdentity.privateKeyPem,
+    },
+    caps: ["tool-events"],
+    connectChallengeTimeoutMs: GATEWAY_SUBSCRIBER_CONNECT_TIMEOUT_MS,
+    onHelloOk: () => {
+      customChatRuntimeStore.activeGatewayClient = client;
+      recordGatewaySubscriberConnected();
+      console.log("[customchat] gateway subscriber connected");
+      ensureGatewayRecoveryLoop();
+      void recoverTrackedRuns().catch(() => null);
+    },
+    onConnectError: (error) => {
+      recordGatewaySubscriberError(error);
+      console.error("[customchat] gateway subscriber connect failed", error.message);
+    },
+    onClose: (_code, reason) => {
+      customChatRuntimeStore.gatewayConnected = false;
+      customChatRuntimeStore.activeGatewayWebSocket = null;
+      console.error("[customchat] gateway subscriber closed", reason || "");
+    },
+    onEvent: (frame) => {
       void (async () => {
-        const raw =
-          typeof event.data === "string"
-            ? event.data
-            : Buffer.isBuffer(event.data)
-              ? event.data.toString("utf8")
-              : String(event.data);
-        const frame = JSON.parse(raw) as JsonRecord;
-        const frameType = typeof frame.type === "string" ? frame.type : "";
-        const frameId = typeof frame.id === "string" ? frame.id : "";
-
-        if (frameType === "event" && frame.event === "connect.challenge") {
-          const payload = asJsonRecord(frame.payload);
-          const nonce = typeof payload.nonce === "string" ? payload.nonce.trim() : "";
-          if (!nonce) {
-            closeAndResolve();
-            return;
-          }
-
-          const signedAt = Date.now();
-          const signaturePayload = buildDeviceAuthPayloadV3({
-            deviceId: gatewayIdentity.deviceId,
-            clientId,
-            clientMode,
-            role,
-            scopes,
-            signedAt,
-            token: authToken,
-            nonce,
-            platform: gatewayIdentity.platform,
-            deviceFamily: gatewayIdentity.deviceFamily,
-          });
-          const signature = base64UrlEncode(
-            crypto.sign(
-              null,
-              Buffer.from(signaturePayload, "utf8"),
-              gatewayIdentity.privateKeyPem,
-            ),
-          );
-
-          ws.send(
-            JSON.stringify({
-              type: "req",
-              id: connectRequestId,
-              method: "connect",
-              params: {
-                minProtocol: 3,
-                maxProtocol: 3,
-                client: {
-                  id: clientId,
-                  displayName: "Custom Chat Plugin",
-                  version: "1.0.0",
-                  platform: gatewayIdentity.platform,
-                  ...(gatewayIdentity.deviceFamily
-                    ? { deviceFamily: gatewayIdentity.deviceFamily }
-                    : {}),
-                  mode: clientMode,
-                },
-                role,
-                scopes,
-                caps: ["tool-events"],
-                device: {
-                  id: gatewayIdentity.deviceId,
-                  publicKey: gatewayIdentity.publicKey,
-                  signature,
-                  signedAt,
-                  nonce,
-                },
-                auth: authToken ? { deviceToken: authToken } : undefined,
-                locale: "zh-CN",
-                userAgent: "customchat-plugin/1.0.0",
-              },
-            }),
-          );
-          return;
-        }
-
-        if (frameType === "res" && frameId === connectRequestId) {
-          if (frame.ok !== true) {
-            console.error("[customchat] gateway subscriber connect failed");
-            closeAndResolve();
-            return;
-          }
-          console.log("[customchat] gateway subscriber connected");
-          started = true;
-          customChatRuntimeStore.activeGatewayWebSocket = ws;
-          recordGatewaySubscriberConnected();
-          globalThis.clearTimeout(connectTimeout);
-          ensureGatewayRecoveryLoop();
-          await recoverTrackedRuns().catch(() => null);
-          return;
-        }
-
-        if (frameType === "res") {
-          const pending = pendingRpcRequests.get(frameId);
-          if (pending) {
-            globalThis.clearTimeout(pending.timeout);
-            pendingRpcRequests.delete(frameId);
-            if (frame.ok === false) {
-              const resError = (frame.error as JsonRecord) || {};
-              const error = new Error(
-                typeof frame.error === "string"
-                  ? frame.error
-                  : typeof resError.message === "string"
-                    ? resError.message
-                    : `Gateway RPC failed (id: ${frameId})`,
-              );
-              pending.reject(error as Error);
-            } else {
-              pending.resolve(frame as JsonRecord);
-            }
-          }
-          return;
-        }
-
-        if (frameType !== "event") {
-          return;
-        }
-
         if (frame.event === "chat") {
           await handleTrackedGatewayChatEvent(asJsonRecord(frame.payload));
           return;
         }
-
         if (frame.event === "agent") {
           await handleTrackedGatewayAgentEvent(asJsonRecord(frame.payload));
         }
       })().catch((error) => {
         console.error("[customchat] gateway subscriber frame failure", error);
       });
-    });
+    },
   });
+
+  customChatRuntimeStore.activeGatewayClient = client;
+  client.start();
+  return client;
 }
 
 /**
@@ -2445,12 +2379,15 @@ async function connectGatewaySubscriberOnce() {
  * 断线后自动重连，同时恢复持久化的 TrackedRun 和启动恢复定时器。
  */
 function ensureGatewaySubscriber() {
-  ensureCustomChatSubscriberLoop({
-    connectOnce: connectGatewaySubscriberOnce,
-    restoreTrackedRunsFromRouteState,
-    recoverTrackedRuns,
-    recoveryIntervalMs: ACTIVE_RUN_RECOVERY_INTERVAL_MS,
-    reconnectDelayMs: 500,
+  if (customChatRuntimeStore.gatewaySubscriberLoopStarted) {
+    return;
+  }
+  markGatewaySubscriberLoopStarted();
+  ensureGatewayRecoveryLoop();
+  void restoreTrackedRunsFromRouteState().catch(() => null);
+  void startGatewaySubscriberClient().catch((error) => {
+    recordGatewaySubscriberError(error);
+    console.error("[customchat] gateway subscriber failure", error);
   });
 }
 

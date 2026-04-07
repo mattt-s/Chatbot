@@ -33,6 +33,15 @@ async function dispatchGatewayRequest(
   params: JsonRecord,
   timeoutMs = 15_000,
 ): Promise<JsonRecord> {
+  const client = customChatRuntimeStore.activeGatewayClient;
+  if (client) {
+    return asJsonRecord(
+      await client.request(method, params, {
+        timeoutMs,
+      }),
+    );
+  }
+
   const ws = customChatRuntimeStore.activeGatewayWebSocket;
   if (!ws || ws.readyState !== ws.OPEN) {
     throw new Error(`Gateway WebSocket is not connected (method: ${method}).`);

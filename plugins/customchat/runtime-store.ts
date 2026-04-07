@@ -1,3 +1,4 @@
+import type { GatewayClient } from "openclaw/plugin-sdk/gateway-runtime";
 import type { PortalDeliveryState } from "./utils.js";
 import type {
   CustomChatRuntimeInspection,
@@ -10,7 +11,9 @@ export const customChatRuntimeStore = {
   trackedRuns: new Map<string, TrackedRun>(),
   gatewaySubscriberLoopStarted: false,
   gatewayRecoveryTimer: null as ReturnType<typeof globalThis.setInterval> | null,
+  activeGatewayClient: null as GatewayClient | null,
   activeGatewayWebSocket: null as WebSocket | null,
+  gatewayConnected: false,
   pendingRpcRequests: new Map<string, PendingRpcRequest>(),
   serviceBootstrapped: false,
   serviceBootCount: 0,
@@ -35,16 +38,17 @@ export function setGatewayRecoveryTimer(timer: ReturnType<typeof globalThis.setI
 }
 
 export function isGatewaySocketConnected() {
-  const socket = customChatRuntimeStore.activeGatewayWebSocket;
-  return Boolean(socket && socket.readyState === socket.OPEN);
+  return customChatRuntimeStore.gatewayConnected;
 }
 
 export function recordGatewaySubscriberConnected() {
+  customChatRuntimeStore.gatewayConnected = true;
   customChatRuntimeStore.lastSubscriberConnectAtMs = Date.now();
   customChatRuntimeStore.lastSubscriberErrorMessage = null;
 }
 
 export function recordGatewaySubscriberError(error: unknown) {
+  customChatRuntimeStore.gatewayConnected = false;
   customChatRuntimeStore.lastSubscriberErrorAtMs = Date.now();
   customChatRuntimeStore.lastSubscriberErrorMessage =
     error instanceof Error ? error.message : String(error);
@@ -116,4 +120,3 @@ export function getCustomChatRuntimeStatusSummary(): CustomChatRuntimeStatus {
     lastSubscriberErrorMessage: customChatRuntimeStore.lastSubscriberErrorMessage,
   };
 }
-

@@ -53,15 +53,12 @@ type BridgeEnvelope =
 
 declare global {
   var __chatbotCustomChatBridgeServerStarted: Promise<void> | undefined;
+  var __chatbotCustomChatPluginSocket: WebSocket | null | undefined;
+  var __chatbotCustomChatPendingAcks: Map<string, PendingAck> | undefined;
 }
 
-const CUSTOMCHAT_BRIDGE_HOST = "127.0.0.1";
 const CUSTOMCHAT_BRIDGE_PATH = "/api/customchat/socket";
 const INBOUND_ACK_TIMEOUT_MS = 30_000;
-
-// ── Plugin socket tracking ──────────────────────────────────────────
-
-let pluginSocket: WebSocket | null = null;
 
 type PendingAck = {
   resolve: (value: unknown) => void;
@@ -69,7 +66,22 @@ type PendingAck = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-const pendingAcks = new Map<string, PendingAck>();
+// ── Plugin socket tracking ──────────────────────────────────────────
+
+function getPluginSocket() {
+  return globalThis.__chatbotCustomChatPluginSocket ?? null;
+}
+
+function setPluginSocket(socket: WebSocket | null) {
+  globalThis.__chatbotCustomChatPluginSocket = socket;
+}
+
+function getPendingAcks() {
+  if (!globalThis.__chatbotCustomChatPendingAcks) {
+    globalThis.__chatbotCustomChatPendingAcks = new Map<string, PendingAck>();
+  }
+  return globalThis.__chatbotCustomChatPendingAcks;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -80,7 +92,7 @@ const pendingAcks = new Map<string, PendingAck>();
 function getBridgeConfig() {
   const env = getEnv();
   return {
-    host: CUSTOMCHAT_BRIDGE_HOST,
+    host: env.customChatBridgeHost,
     port: env.customChatBridgePort,
     path: CUSTOMCHAT_BRIDGE_PATH,
   };
@@ -149,7 +161,8 @@ function startHeartbeat(server: WebSocketServer) {
  * 清理 plugin socket 引用及所有 pending ack
  */
 function clearPluginSocket() {
-  pluginSocket = null;
+  setPluginSocket(null);
+  const pendingAcks = getPendingAcks();
   for (const [requestId, pending] of pendingAcks) {
     clearTimeout(pending.timer);
     pending.reject(new Error("Plugin WebSocket disconnected."));
@@ -183,6 +196,7 @@ async function handleEnvelope(socket: WebSocket, envelope: BridgeEnvelope) {
   }
 
   if (envelope.type === "ack") {
+    const pendingAcks = getPendingAcks();
     const pending = pendingAcks.get(envelope.requestId);
     if (!pending) {
       return;
@@ -299,13 +313,14 @@ async function startCustomChatBridgeServer() {
     bindSocketLifecycle(socket);
 
     // 追踪 plugin socket（新连接取代旧连接）
-    if (pluginSocket && pluginSocket !== socket) {
+    const activePluginSocket = getPluginSocket();
+    if (activePluginSocket && activePluginSocket !== socket) {
       clearPluginSocket();
     }
-    pluginSocket = socket;
+    setPluginSocket(socket);
 
     socket.on("close", () => {
-      if (pluginSocket === socket) {
+      if (getPluginSocket() === socket) {
         clearPluginSocket();
       }
     });
@@ -380,11 +395,13 @@ async function sendToPlugin(
 ): Promise<unknown> {
   await ensureCustomChatBridgeServer();
 
+  const pluginSocket = getPluginSocket();
   if (!pluginSocket || pluginSocket.readyState !== pluginSocket.OPEN) {
     throw new Error("Plugin WebSocket is not connected.");
   }
 
   const requestId = `${msgType}:${crypto.randomUUID()}`;
+  const pendingAcks = getPendingAcks();
 
   return new Promise<unknown>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -440,5 +457,6 @@ export async function sendRpcToPlugin<T = unknown>(
  * 检查 Plugin WebSocket 是否已连接
  */
 export function isPluginConnected(): boolean {
+  const pluginSocket = getPluginSocket();
   return pluginSocket !== null && pluginSocket.readyState === pluginSocket.OPEN;
 }

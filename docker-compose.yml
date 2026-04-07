@@ -3,7 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    network_mode: host
+    # NOTE: Docker Desktop on macOS does not support Linux-style host networking.
+    # Use explicit port mappings so the host OpenClaw Gateway + customchat plugin
+    # can reach the app (3000) and the bridge websocket (3001).
+    ports:
+      - "3000:3000"
+      - "3001:3001"
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
     environment:
       NODE_ENV: production

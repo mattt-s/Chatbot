@@ -7,6 +7,7 @@ import path from "node:path";
 
 const DEFAULT_DOWNLOAD_DIR_NAME = "downloads";
 const DEFAULT_VOICE_DIR_NAME = "voice";
+const DEFAULT_CUSTOMCHAT_BRIDGE_HOST = "0.0.0.0";
 const DEFAULT_CUSTOMCHAT_BRIDGE_PORT = 3001;
 const DEFAULT_GROUP_ROLE_WATCHDOG_INTERVAL_MS = 30_000;
 const DEFAULT_GROUP_ROLE_BUSY_INSPECT_AFTER_MS = 5 * 60_000;
@@ -60,6 +61,8 @@ export function getEnv() {
     adminName: process.env.APP_ADMIN_NAME ?? "Channel Admin",
     agentCatalogJson: process.env.APP_AGENT_CATALOG?.trim() || "",
     customChatAuthToken: process.env.CUSTOMCHAT_AUTH_TOKEN?.trim() || "",
+    customChatBridgeHost:
+      process.env.CUSTOMCHAT_BRIDGE_HOST?.trim() || DEFAULT_CUSTOMCHAT_BRIDGE_HOST,
     customChatBridgePort: parseInteger(
       process.env.CUSTOMCHAT_BRIDGE_PORT,
       DEFAULT_CUSTOMCHAT_BRIDGE_PORT,
