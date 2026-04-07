@@ -112,26 +112,13 @@ let _pluginDebugResolved = false;
 let _pluginDebugEnabled = false;
 
 /**
- * 解析插件调试日志开关。优先读取环境变量 CUSTOMCHAT_DEBUG，
- * 其次从 ~/.openclaw/openclaw.json 配置中读取 channels.customchat.debug。
+ * 解析插件调试日志开关。从 ~/.openclaw/openclaw.json 配置中读取 channels.customchat.debug。
  * @returns 是否启用调试日志
  */
 async function resolvePluginDebug(): Promise<boolean> {
   if (_pluginDebugResolved) return _pluginDebugEnabled;
   _pluginDebugResolved = true;
 
-  // Fast path: env var
-  const envDebug = process.env.CUSTOMCHAT_DEBUG?.trim().toLowerCase();
-  if (envDebug === "true" || envDebug === "1" || envDebug === "on") {
-    _pluginDebugEnabled = true;
-    return true;
-  }
-  if (envDebug === "false" || envDebug === "0" || envDebug === "off") {
-    _pluginDebugEnabled = false;
-    return false;
-  }
-
-  // Fallback: read from openclaw.json
   try {
     const configPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
     const raw = JSON.parse(await fs.readFile(configPath, "utf8")) as JsonRecord;
@@ -1000,6 +987,7 @@ async function readJsonRequest(req: IncomingMessage, maxBytes = 25 * 1024 * 1024
 let cachedDefaultAccountConfig: AccountConfig | null = null;
 let cachedInboundToken: string | null = null;
 let cachedGatewayAuthToken: string | null = null;
+let cachedGatewayPort: number | null = null;
 
 /**
  * 解析默认账户配置，带模块级缓存。
@@ -1050,20 +1038,21 @@ async function resolveGatewayAuthToken(): Promise<string> {
 
 /**
  * 解析 Gateway WebSocket URL（插件订阅 Gateway 事件流用）。
- * 优先级：CUSTOMCHAT_GATEWAY_WS_URL > OPENCLAW_GATEWAY_URL > 默认 ws://127.0.0.1:18789。
- * @returns {string} Gateway WebSocket URL
+ * 从 ~/.openclaw/openclaw.json 读取 gateway.port，默认 18789。
+ * @returns {Promise<string>} Gateway WebSocket URL
  */
-function resolveGatewayWsUrl() {
-  const explicit =
-    process.env.CUSTOMCHAT_GATEWAY_WS_URL?.trim() ||
-    process.env.OPENCLAW_GATEWAY_URL?.trim() ||
-    "";
-  if (explicit) {
-    return explicit.replace(/\/+$/, "");
+async function resolveGatewayWsUrl(): Promise<string> {
+  if (cachedGatewayPort === null) {
+    try {
+      const configPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
+      const raw = JSON.parse(await fs.readFile(configPath, "utf8"));
+      const port = typeof raw?.gateway?.port === "number" ? raw.gateway.port : 18789;
+      cachedGatewayPort = port;
+    } catch {
+      cachedGatewayPort = 18789;
+    }
   }
-
-  const port = process.env.OPENCLAW_GATEWAY_PORT?.trim() || "18789";
-  return `ws://127.0.0.1:${port}`;
+  return `ws://127.0.0.1:${cachedGatewayPort}`;
 }
 
 /**
@@ -2321,7 +2310,7 @@ async function startGatewaySubscriberClient() {
   const gatewayAuthToken = await resolveGatewayAuthToken();
   const scopes = ["operator.admin", "operator.read", "operator.write"];
   const client = new GatewayClient({
-    url: resolveGatewayWsUrl(),
+    url: await resolveGatewayWsUrl(),
     token: gatewayAuthToken || undefined,
     role: "operator",
     scopes,

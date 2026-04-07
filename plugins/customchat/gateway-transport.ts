@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,16 +9,11 @@ import {
   asJsonRecord,
   sleep,
   flattenSessionRecords,
-  parseJsonOutput,
   scoreSessionSnapshot,
   toSessionSnapshot,
 } from "./utils.js";
 import { customChatRuntimeStore } from "./runtime-store.js";
 
-const DEFAULT_OPENCLAW_BIN =
-  process.env.CUSTOMCHAT_OPENCLAW_BIN?.trim() ||
-  process.env.OPENCLAW_BIN?.trim() ||
-  "openclaw";
 const SESSION_RESOLVE_ATTEMPTS = 6;
 const SESSION_RESOLVE_BACKOFF_MS = [200, 350, 600, 900, 1300, 1800];
 
@@ -66,65 +60,12 @@ async function dispatchGatewayRequest(
   });
 }
 
-async function runOpenClawJson(args: string[]) {
-  const child = spawn(DEFAULT_OPENCLAW_BIN, args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      NO_COLOR: "1",
-      FORCE_COLOR: "0",
-      TERM: "dumb",
-      OPENCLAW_PLUGINS_ALLOW: "",
-      OPENCLAW_GATEWAY: "0",
-    },
-  });
-
-  const stdout: Buffer[] = [];
-  const stderr: Buffer[] = [];
-
-  child.stdout?.on("data", (chunk) => {
-    stdout.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  });
-  child.stderr?.on("data", (chunk) => {
-    stderr.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  });
-
-  const exitCode = await new Promise<number>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code) => resolve(code ?? 0));
-  });
-
-  if (exitCode !== 0) {
-    const errorText = Buffer.concat(stderr).toString("utf8").trim();
-    throw new Error(errorText || `openclaw ${args.join(" ")} failed with exit ${exitCode}`);
-  }
-
-  return parseJsonOutput(Buffer.concat(stdout).toString("utf8"));
-}
-
 export async function runGatewayCall(method: string, params: JsonRecord) {
-  try {
-    return await dispatchGatewayRequest(method, params);
-  } catch {
-    return runOpenClawJson([
-      "gateway",
-      "call",
-      method,
-      "--params",
-      JSON.stringify(params),
-      "--json",
-    ]);
-  }
+  return dispatchGatewayRequest(method, params);
 }
 
 export async function listGatewaySessions(): Promise<SessionSnapshot[]> {
-  let payload: unknown = null;
-
-  try {
-    payload = await runGatewayCall("sessions.list", {});
-  } catch {
-    payload = await runOpenClawJson(["sessions", "--json"]);
-  }
+  const payload = await runGatewayCall("sessions.list", {});
 
   const seenKeys = new Set<string>();
   const snapshots: SessionSnapshot[] = [];
