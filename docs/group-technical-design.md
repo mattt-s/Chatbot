@@ -9,6 +9,38 @@
 - 群角色忙碌时，新消息进入该角色自己的等待队列
 - 群角色完成后，才会继续刷出队列
 
+### OpenClaw Session Rollover Note
+
+需要特别注意：OpenClaw 默认会对 session 做自动换新。
+
+- 如果没有显式配置 `session.reset` / `session.resetByType` / `session.resetByChannel`
+- OpenClaw 默认会按 `daily` 模式处理 session
+- 默认换新边界是 **Gateway 主机本地时间凌晨 4:00**
+- 这会导致同一个群角色的 `sessionKey` 在 4:00 之后的下一条消息到来时切到新的 `sessionId`
+
+对普通聊天来说，这个默认策略未必有问题；但对“群角色长期协作”的场景来说，它会表现成：
+
+- 角色前一天的协作上下文突然丢失
+- leader / 成员第二天继续工作时，像是“重新开了一个新会话”
+
+因此，群聊部署时更推荐把 OpenClaw 的 session reset 策略改成 `idle`，例如：
+
+```json
+{
+  "session": {
+    "reset": { "mode": "idle", "idleMinutes": 43200 }
+  }
+}
+```
+
+这表示：
+
+- 不再按每天 4:00 固定切新 session
+- 改为“连续 30 天无活动”才切新的 `sessionId`
+- 只要期间有新消息，空闲窗口就会重新开始计算
+
+如果希望只调整群聊，不影响 direct 会话，也可以进一步改成 `resetByType.group` 做定向覆盖。
+
 ## AI Group Management
 
 当前群组体系还额外提供了一条“角色可调用的管理能力”，但它和普通群消息路由是两套边界明确的机制：

@@ -155,6 +155,50 @@ openclaw plugins list
 
 这些不再是常规部署入口；如果你在文档或旧脚本里看到 `CUSTOMCHAT_BASE_URL`，那已经是旧口径。
 
+### 5.1 OpenClaw session reset 建议
+
+除了 `channels.customchat`，还建议你显式检查 OpenClaw 的 `session` 配置。
+
+原因是：
+
+- OpenClaw 默认会给 session 使用 `daily` reset 策略
+- 默认边界是 **Gateway 主机本地时间凌晨 4:00**
+- 如果不改，群角色 session 很可能会在第二天第一条消息时切到新的 `sessionId`
+- 对群协作场景来说，这会表现成“角色上下文突然丢失”
+
+因此更推荐在 `~/.openclaw/openclaw.json` 里显式加入：
+
+```json
+{
+  "session": {
+    "reset": { "mode": "idle", "idleMinutes": 43200 }
+  }
+}
+```
+
+这段配置的含义是：
+
+- 用“空闲超时”替代“每天 4 点换新”
+- 连续 30 天没有活动时，下一条消息才会创建新的 `sessionId`
+- 如果中间有新消息，30 天窗口会重新开始计算
+
+如果你只想让群聊避免每天 4 点换新，而单聊保持别的策略，也可以改成：
+
+```json
+{
+  "session": {
+    "resetByType": {
+      "group": { "mode": "idle", "idleMinutes": 43200 }
+    }
+  }
+}
+```
+
+注意：
+
+- `/new`、`/reset` 这类显式命令仍然会新建 session
+- 这条配置只影响后续 session 轮换行为，不会自动把旧 session 合并回来
+
 ### 6. 插件更新后要不要重启
 
 通常需要重启 OpenClaw Gateway，让插件重新加载：
