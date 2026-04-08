@@ -14,9 +14,11 @@ import {
   createGroupRole,
   createPanel,
   clearGroupPanelPlan,
+  clearGroupRoleMemory,
   deletePanel,
   ensureSeededAdminUser,
   findGroupRoleById,
+  getGroupPanelMemory,
   getPanelRecordForUser,
   listGroupRoles,
   listPanelsForUser,
@@ -25,6 +27,7 @@ import {
   unsetGroupRoleLeader,
   updateGroupPanelPlan,
   updateGroupRole,
+  updateGroupRoleMemory,
 } from "@/lib/store";
 import type {
   GroupPlanItem,
@@ -468,6 +471,32 @@ async function handleRemoveGroupRole(user: SessionUser, params: AppRpcParams) {
   };
 }
 
+// ─────────────────────────────────────────────
+// Group Memory handlers
+// ─────────────────────────────────────────────
+
+async function handleGetGroupMemory(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const memory = await getGroupPanelMemory(panel.id);
+  return { ok: true, panelId: panel.id, memory };
+}
+
+async function handleUpdateGroupMemory(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const roleId = readTrimmedString(params, "roleId", { required: true });
+  const roleTitle = readTrimmedString(params, "roleTitle", { required: true });
+  const content = readTrimmedString(params, "content", { required: true });
+  await updateGroupRoleMemory(panel.id, roleId, roleTitle, content);
+  return { ok: true, panelId: panel.id, roleId };
+}
+
+async function handleClearGroupMemory(user: SessionUser, params: AppRpcParams) {
+  const panel = await requireGroupPanelByReference(user.id, params);
+  const roleId = readTrimmedString(params, "roleId", { required: true });
+  await clearGroupRoleMemory(panel.id, roleId);
+  return { ok: true, panelId: panel.id, roleId };
+}
+
 /**
  * 分发 Plugin → App 管理类 RPC。
  */
@@ -492,6 +521,12 @@ export async function dispatchCustomChatAppRpc(
       return handleUpdateGroupPlan(user, params);
     case "group_plan.clear":
       return handleClearGroupPlan(user, params);
+    case "group_memory.get":
+      return handleGetGroupMemory(user, params);
+    case "group_memory.update":
+      return handleUpdateGroupMemory(user, params);
+    case "group_memory.clear":
+      return handleClearGroupMemory(user, params);
     case "group.list":
       return handleListGroups(user);
     case "agents.list":

@@ -120,6 +120,15 @@ export interface StoredMessage {
 /** 面板类型：direct=一对一对话, group=群组 */
 export type PanelKind = "direct" | "group";
 export type GroupTaskState = "idle" | "in_progress" | "waiting_input" | "blocked" | "pending_review" | "completed";
+
+/** 群组角色记忆条目 */
+export interface GroupRoleMemory {
+  /** 角色显示名，供其他成员阅读时识别 */
+  roleTitle: string;
+  /** 精简记忆内容：文件路径、当前进度、当前问题等 */
+  content: string;
+  updatedAt: string;
+}
 export type GroupPlanItemStatus = "pending" | "in_progress" | "done" | "blocked";
 
 export interface GroupPlanItem {
@@ -153,6 +162,8 @@ export interface StoredPanel {
   taskStateChangedAt?: string;
   /** 群计划，仅群组使用 */
   groupPlan?: GroupPlan | null;
+  /** 群共享记忆板：roleId → 记忆条目，仅群组使用 */
+  groupMemory?: Record<string, GroupRoleMemory> | null;
   /** 用户角色显示名 */
   userRoleName?: string;
   /** 助手角色显示名 */

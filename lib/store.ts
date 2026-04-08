@@ -24,6 +24,7 @@ import type {
   GroupPlan,
   GroupPlanItem,
   GroupPlanItemStatus,
+  GroupRoleMemory,
   GroupTaskState,
   GroupRoleView,
   MessageView,
@@ -1610,6 +1611,59 @@ export async function clearGroupPanelPlan(panelId: string): Promise<PanelView> {
   });
 
   return nextPanel;
+}
+
+// ─────────────────────────────────────────────
+// Group Memory
+// ─────────────────────────────────────────────
+
+export async function getGroupPanelMemory(
+  panelId: string,
+): Promise<Record<string, GroupRoleMemory>> {
+  const data = await readData();
+  const panel = data.panels.find((p) => p.id === panelId);
+  return panel?.groupMemory ?? {};
+}
+
+export async function updateGroupRoleMemory(
+  panelId: string,
+  roleId: string,
+  roleTitle: string,
+  content: string,
+): Promise<void> {
+  await mutateData((draft) => {
+    const panel = draft.panels.find((p) => p.id === panelId);
+    if (!panel || (panel.kind ?? "direct") !== "group") {
+      throw new Error("Group panel not found.");
+    }
+    if (!panel.groupMemory) {
+      panel.groupMemory = {};
+    }
+    panel.groupMemory[roleId] = {
+      roleTitle,
+      content: content.trim(),
+      updatedAt: nowIso(),
+    };
+    panel.updatedAt = nowIso();
+    return undefined;
+  });
+}
+
+export async function clearGroupRoleMemory(
+  panelId: string,
+  roleId: string,
+): Promise<void> {
+  await mutateData((draft) => {
+    const panel = draft.panels.find((p) => p.id === panelId);
+    if (!panel || (panel.kind ?? "direct") !== "group") {
+      throw new Error("Group panel not found.");
+    }
+    if (panel.groupMemory) {
+      delete panel.groupMemory[roleId];
+    }
+    panel.updatedAt = nowIso();
+    return undefined;
+  });
 }
 
 export async function listInProgressGroupPanels(): Promise<StoredPanel[]> {
