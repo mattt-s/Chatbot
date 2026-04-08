@@ -25,7 +25,7 @@ const patchSchema = z.object({
   agentId: z.string().min(1).optional(),
   userRoleName: z.string().max(40).optional(),
   assistantRoleName: z.string().max(40).optional(),
-  taskStateSelection: z.enum(["idle", "in_progress", "completed"]).optional(),
+  taskStateSelection: z.enum(["idle", "in_progress", "waiting_input", "blocked", "pending_review", "completed"]).optional(),
 });
 
 type RouteContext = {

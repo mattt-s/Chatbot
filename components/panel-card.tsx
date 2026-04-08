@@ -382,7 +382,7 @@ export function PanelCard({
   async function patchPanel(patch: {
     title?: string;
     agentId?: string;
-    taskStateSelection?: "idle" | "in_progress" | "completed";
+    taskStateSelection?: "idle" | "in_progress" | "waiting_input" | "blocked" | "pending_review" | "completed";
   }) {
     const resp = await fetch(`/api/panels/${panel.id}`, {
       method: "PATCH",

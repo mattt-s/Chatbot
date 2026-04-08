@@ -154,7 +154,10 @@ export function PanelHeader({
                   onClick={(event) => event.stopPropagation()}
                 >
                   {[
-                    { value: "in_progress", label: "进行中" },
+                    { value: "in_progress", label: "执行中" },
+                    { value: "waiting_input", label: "等待输入" },
+                    { value: "blocked", label: "被阻塞" },
+                    { value: "pending_review", label: "等待审核" },
                     { value: "completed", label: "已完成" },
                     { value: "idle", label: "空闲" },
                   ].map((option) => {

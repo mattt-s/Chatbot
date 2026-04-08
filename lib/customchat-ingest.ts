@@ -16,6 +16,9 @@ import {
   normalizeGroupTaskState,
   messageMarksGroupTaskCompleted,
   messageMarksGroupTaskInProgress,
+  messageMarksGroupTaskWaitingInput,
+  messageMarksGroupTaskBlocked,
+  messageMarksGroupTaskPendingReview,
   stripGroupTaskMarkers,
 } from "@/lib/group-task";
 import {
@@ -286,6 +289,9 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
   let displayText = text;
   let leaderIssuedCompletion = false;
   let leaderIssuedInProgress = false;
+  let leaderIssuedWaitingInput = false;
+  let leaderIssuedBlocked = false;
+  let leaderIssuedPendingReview = false;
   let shouldSuppressBridgeNoiseText = false;
   let senderAgentId: string | null = null;
 
@@ -302,6 +308,18 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
       role?.isLeader === true &&
       parsed.state === "final" &&
       messageMarksGroupTaskInProgress(text);
+    leaderIssuedWaitingInput =
+      role?.isLeader === true &&
+      parsed.state === "final" &&
+      messageMarksGroupTaskWaitingInput(text);
+    leaderIssuedBlocked =
+      role?.isLeader === true &&
+      parsed.state === "final" &&
+      messageMarksGroupTaskBlocked(text);
+    leaderIssuedPendingReview =
+      role?.isLeader === true &&
+      parsed.state === "final" &&
+      messageMarksGroupTaskPendingReview(text);
 
     if (text) {
       const mentions = parseTrailingMentions(text, groupRoles);
@@ -396,7 +414,13 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
       ? "completed"
       : leaderIssuedInProgress
         ? "in_progress"
-        : null;
+        : leaderIssuedWaitingInput
+          ? "waiting_input"
+          : leaderIssuedBlocked
+            ? "blocked"
+            : leaderIssuedPendingReview
+              ? "pending_review"
+              : null;
     if (nextTaskState) {
       await setGroupPanelTaskState(panel.id, nextTaskState, "leader").catch(() => null);
     }

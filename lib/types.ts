@@ -119,7 +119,7 @@ export interface StoredMessage {
 
 /** 面板类型：direct=一对一对话, group=群组 */
 export type PanelKind = "direct" | "group";
-export type GroupTaskState = "idle" | "in_progress" | "completed";
+export type GroupTaskState = "idle" | "in_progress" | "waiting_input" | "blocked" | "pending_review" | "completed";
 export type GroupPlanItemStatus = "pending" | "in_progress" | "done" | "blocked";
 
 export interface GroupPlanItem {

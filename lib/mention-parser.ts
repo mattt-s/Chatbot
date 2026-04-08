@@ -8,6 +8,9 @@
 import {
   GROUP_TASK_COMPLETION_MARKER,
   GROUP_TASK_IN_PROGRESS_MARKER,
+  GROUP_TASK_WAITING_INPUT_MARKER,
+  GROUP_TASK_BLOCKED_MARKER,
+  GROUP_TASK_PENDING_REVIEW_MARKER,
 } from "@/lib/group-task";
 import type { StoredGroupRole } from "@/lib/types";
 
@@ -221,9 +224,14 @@ export function buildDispatchMessage(params: {
         `4. 只有当你确实需要某个成员继续执行、补充信息、回答问题时，才在 footer 控制块里 @该成员。`,
         `5. 不要为了确认链路、确认收悉、礼貌回应而 @成员。`,
         `6. 如果某个成员已经给出足够结果，而你暂时不需要任何人继续动作，可以直接总结，不要再继续转发。`,
-        `7. 当群任务已经正式开始推进，或你判断接下来还需要继续协作推进时，在 footer 控制块里单独另起一行输出 ${GROUP_TASK_IN_PROGRESS_MARKER}。`,
-        `8. 只有当整个群任务确实完成时，才在 footer 控制块里单独另起一行输出 ${GROUP_TASK_COMPLETION_MARKER}。`,
-        `9. footer 控制块中，@角色行 和任务状态标记行可以任意先后排列，但同一条回复里绝对不要同时输出 ${GROUP_TASK_IN_PROGRESS_MARKER} 和 ${GROUP_TASK_COMPLETION_MARKER}。`,
+        `7. 根据当前群任务实际情况，在 footer 控制块里单独另起一行输出对应的状态标记（每条回复最多输出一个）：`,
+        `   - 任务正式开始推进或需要继续协作：输出 ${GROUP_TASK_IN_PROGRESS_MARKER}`,
+        `   - 需要用户提供更多信息才能继续：输出 ${GROUP_TASK_WAITING_INPUT_MARKER}`,
+        `   - 遇到无法自行解决的障碍需外部介入：输出 ${GROUP_TASK_BLOCKED_MARKER}`,
+        `   - 阶段性产出已完成、等待用户确认审核：输出 ${GROUP_TASK_PENDING_REVIEW_MARKER}`,
+        `   - 整个群任务确实全部完成：输出 ${GROUP_TASK_COMPLETION_MARKER}`,
+        `8. 同一条回复里绝对不要同时输出多个状态标记，只选最符合当前情况的那一个。`,
+        `9. footer 控制块中，@角色行 和任务状态标记行可以任意先后排列。`,
         `10. 你还负责维护这个群面向用户展示的简洁 Plan。任务有实质推进、阻塞变化、阶段完成时，使用 manage_group_plan 工具更新当前群的 Plan。`,
         `11. Plan 必须简洁，只写当前进度摘要和关键事项，不要把完整讨论过程写进去。`,
         `12. 如果你只是回答一个小问题、闲聊、补充说明，且不代表群任务进入或继续推进，就不要输出任何状态标记，也不要更新 Plan。`,
