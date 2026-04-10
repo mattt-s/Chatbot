@@ -213,6 +213,11 @@ function normalizeStoredSettingsUpdate(
     input.groupRoleBusyAbortAfterMs > 0
       ? { groupRoleBusyAbortAfterMs: Math.trunc(input.groupRoleBusyAbortAfterMs) }
       : {}),
+    ...(typeof input.groupRoleReInjectAfterReplies === "number" &&
+    Number.isFinite(input.groupRoleReInjectAfterReplies) &&
+    input.groupRoleReInjectAfterReplies > 0
+      ? { groupRoleReInjectAfterReplies: Math.trunc(input.groupRoleReInjectAfterReplies) }
+      : {}),
     updatedAt: nowIso(),
   };
 }

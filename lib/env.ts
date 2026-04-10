@@ -12,6 +12,7 @@ const DEFAULT_CUSTOMCHAT_BRIDGE_PORT = 3001;
 const DEFAULT_GROUP_ROLE_WATCHDOG_INTERVAL_MS = 30_000;
 const DEFAULT_GROUP_ROLE_BUSY_INSPECT_AFTER_MS = 5 * 60_000;
 const DEFAULT_GROUP_ROLE_BUSY_ABORT_AFTER_MS = 10 * 60_000;
+const DEFAULT_GROUP_ROLE_REINJECT_AFTER_REPLIES = 10;
 
 function parseBoolean(value: string | undefined) {
   if (typeof value !== "string") {
@@ -70,6 +71,7 @@ export function getEnv() {
     groupRoleWatchdogIntervalMs: DEFAULT_GROUP_ROLE_WATCHDOG_INTERVAL_MS,
     groupRoleBusyInspectAfterMs: DEFAULT_GROUP_ROLE_BUSY_INSPECT_AFTER_MS,
     groupRoleBusyAbortAfterMs: DEFAULT_GROUP_ROLE_BUSY_ABORT_AFTER_MS,
+    groupRoleReInjectAfterReplies: DEFAULT_GROUP_ROLE_REINJECT_AFTER_REPLIES,
   };
 }
 

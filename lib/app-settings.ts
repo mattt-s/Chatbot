@@ -31,6 +31,7 @@ function normalizeStoredAppSettings(input: unknown): StoredAppSettings {
     groupRoleWatchdogIntervalMs: asPositiveInteger(candidate.groupRoleWatchdogIntervalMs),
     groupRoleBusyInspectAfterMs: asPositiveInteger(candidate.groupRoleBusyInspectAfterMs),
     groupRoleBusyAbortAfterMs: asPositiveInteger(candidate.groupRoleBusyAbortAfterMs),
+    groupRoleReInjectAfterReplies: asPositiveInteger(candidate.groupRoleReInjectAfterReplies),
     updatedAt:
       typeof candidate.updatedAt === "string" && candidate.updatedAt.trim()
         ? candidate.updatedAt.trim()
@@ -67,6 +68,8 @@ export function resolveEffectiveAppSettings(
       normalized.groupRoleBusyInspectAfterMs ?? env.groupRoleBusyInspectAfterMs,
     groupRoleBusyAbortAfterMs:
       normalized.groupRoleBusyAbortAfterMs ?? env.groupRoleBusyAbortAfterMs,
+    groupRoleReInjectAfterReplies:
+      normalized.groupRoleReInjectAfterReplies ?? env.groupRoleReInjectAfterReplies,
   };
 }
 

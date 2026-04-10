@@ -200,6 +200,7 @@ export interface StoredAppSettings {
   groupRoleWatchdogIntervalMs?: number;
   groupRoleBusyInspectAfterMs?: number;
   groupRoleBusyAbortAfterMs?: number;
+  groupRoleReInjectAfterReplies?: number;
   updatedAt?: string;
 }
 
@@ -353,6 +354,7 @@ export interface AppSettingsView {
   groupRoleWatchdogIntervalMs: number;
   groupRoleBusyInspectAfterMs: number;
   groupRoleBusyAbortAfterMs: number;
+  groupRoleReInjectAfterReplies: number;
 }
 
 /** SSE 聊天事件载荷，由 customchat-ingest 发布到前端 */

@@ -79,6 +79,13 @@ const busyRoles = new Map<string, BusyRoleState>();
 const initializedRoles = new Set<string>();
 
 /**
+ * 记录每个角色完成回复的次数，用于定期重注入
+ * key: `${panelId}:${groupRoleId}`
+ */
+const roleReplyCounters = new Map<string, number>();
+
+
+/**
  * runId → groupRoleId 映射（供 ingest 回流时查找）
  * key: runId
  */
@@ -199,6 +206,21 @@ function hasBeenInitialized(panelId: string, groupRoleId: string): boolean {
 
 function markInitialized(panelId: string, groupRoleId: string) {
   initializedRoles.add(`${panelId}:${groupRoleId}`);
+}
+
+function incrementRoleReplyCounter(panelId: string, groupRoleId: string) {
+  const key = `${panelId}:${groupRoleId}`;
+  roleReplyCounters.set(key, (roleReplyCounters.get(key) ?? 0) + 1);
+}
+
+function shouldReInject(panelId: string, groupRoleId: string): boolean {
+  const count = roleReplyCounters.get(`${panelId}:${groupRoleId}`) ?? 0;
+  const interval = readEffectiveAppSettingsSync().groupRoleReInjectAfterReplies;
+  return count > 0 && count % interval === 0;
+}
+
+function needsInjection(panelId: string, groupRoleId: string): boolean {
+  return !hasBeenInitialized(panelId, groupRoleId) || shouldReInject(panelId, groupRoleId);
 }
 
 function ensureBusyRoleWatchdogStarted() {
@@ -530,6 +552,11 @@ export function resetInitializedRoles(panelId: string) {
       initializedRoles.delete(key);
     }
   }
+  for (const key of roleReplyCounters.keys()) {
+    if (key.startsWith(`${panelId}:`)) {
+      roleReplyCounters.delete(key);
+    }
+  }
 }
 
 function getPanelBusyRoleCount(panelId: string): number {
@@ -653,7 +680,6 @@ async function flushQueue(panelId: string, groupRoleId: string, groupRoles: Stor
   const targetRole = groupRoles.find((r) => r.id === groupRoleId);
   if (!targetRole) return;
 
-  // dispatch 给角色（合并消息不注入首次提示词，因为已有上下文）
   await dispatchToRole({
     panelId,
     groupRoleId,
@@ -661,7 +687,7 @@ async function flushQueue(panelId: string, groupRoleId: string, groupRoles: Stor
     text: combined,
     allRoles: groupRoles,
     targetRole,
-    isFirstCall: false,
+    isFirstCall: needsInjection(panelId, groupRoleId),
   });
 }
 
@@ -814,7 +840,7 @@ export async function routeMessage(params: {
         targetRole.id,
       );
       if (recovered) {
-        const isFirstCall = !hasBeenInitialized(params.panelId, targetRole.id);
+        const isFirstCall = needsInjection(params.panelId, targetRole.id);
         const dispatchText = buildDispatchMessage({
           groupPanel: params.panelTitle
             ? { id: params.panelId, title: params.panelTitle }
@@ -936,6 +962,9 @@ export async function onRoleReplyFinal(params: {
     return;
   }
 
+  // 1.5 计数：用于定期重注入判断
+  incrementRoleReplyCounter(params.panelId, params.groupRoleId);
+
   // 2. 路由该回复中的 @mention
   await routeMessage({
     panelId: params.panelId,
@@ -978,6 +1007,8 @@ export async function onRoleReplyTerminalWithoutRouting(params: {
       action: "skip-flush",
       reason: "markRoleIdle-failed",
     });
+  } else {
+    incrementRoleReplyCounter(params.panelId, params.groupRoleId);
   }
 }
 
