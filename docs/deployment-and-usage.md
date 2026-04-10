@@ -211,10 +211,11 @@ systemctl --user restart openclaw-gateway
 
 ### 7. 群组管理 AI 能力怎么生效
 
-当前仓库里的 `customchat` 插件除了 channel 能力，还内置了两条专门给角色使用的群能力：
+当前仓库里的 `customchat` 插件除了 channel 能力，还内置了三条专门给角色使用的群能力：
 
 - tool 名称：`manage_group`
 - tool 名称：`manage_group_plan`
+- tool 名称：`manage_group_memory`
 - skill 路径：`plugins/customchat/skills/manage-group/`
 - skill 路径：`plugins/customchat/skills/group-plan/`
 
@@ -222,8 +223,9 @@ systemctl --user restart openclaw-gateway
 
 其中：
 
-- `manage_group` 负责“群结构与群入口管理”
-- `manage_group_plan` 负责“群进度 Plan 的读取与维护”
+- `manage_group` 负责”群结构与群入口管理”
+- `manage_group_plan` 负责”群进度 Plan 的读取与维护”
+- `manage_group_memory` 负责”群共享记忆板的读写”
 
 当前 `manage_group` 支持：
 
@@ -244,12 +246,18 @@ systemctl --user restart openclaw-gateway
 - 更新某个群的 Plan 摘要与条目
 - 清空某个群的 Plan
 
-这两条能力都**不负责**普通群消息的转发与协作流程。  
-也就是说，即使角色可以帮你“建群、拉人、设 leader”，群里的日常协作仍然走现有群聊 runtime：
+当前 `manage_group_memory` 支持：
+
+- 读取当前群所有成员的记忆（`get_memory`）
+- 更新自己的记忆条目（`update_my_memory`）
+- 清空自己的记忆条目（`clear_my_memory`）
+
+这三条能力都**不负责**普通群消息的转发与协作流程。  
+也就是说，即使角色可以帮你”建群、拉人、设 leader”，群里的日常协作仍然走现有群聊 runtime：
 
 - `@角色` 路由
 - leader 兜底
-- `[TASK_IN_PROGRESS] / [TASK_COMPLETED]`
+- 任务状态标记（`[TASK_IN_PROGRESS]` / `[TASK_WAITING_INPUT]` 等）
 - busy/idle 队列与 watchdog
 - leader 默认维护的群 Plan
 
@@ -493,12 +501,17 @@ npm run start
 当前版本已经支持前者，但两者是分开的。  
 也就是说，角色可以帮你把群结构搭起来，但普通群消息仍然按照下文的路由规则运行，不会因为有了 `manage_group` 就自动改成新的对话协议。
 
-此外，群里还新增了一份**面向用户展示的简洁 Plan**：
+此外，群里还新增了两个协作辅助机制：
 
+**面向用户展示的简洁 Plan**：
 - Plan 由 `manage_group_plan` 负责读取与维护
 - 默认由 leader 在任务推进过程中维护
-- 普通成员不会被额外要求感知或维护 Plan
 - 用户可以直接在 Web 端查看当前群的 Plan，而不必翻完整聊天记录
+
+**群共享记忆板**：
+- 每个成员各自维护一块记忆，记录自己负责的文件路径、当前进度、当前问题等核心信息
+- 所有成员都可以通过 `manage_group_memory` 读取全部成员的记忆
+- 目标是让群消息保持简洁，无需在每条消息里重复背景说明
 
 #### 2. 显式 `@角色` 路由
 
@@ -516,26 +529,26 @@ leader 可以继续分派任务、催办成员、汇总阶段结果。
 
 #### 5. 群任务状态
 
-群组整体会维护任务状态：
+群组整体会维护任务状态，共六种：
 
-- `idle`
-- `in_progress`
-- `completed`
+| 状态 | 含义 |
+|------|------|
+| 空闲 `idle` | 无任务进行中 |
+| 执行中 `in_progress` | 成员正在推进任务 |
+| 等待输入 `waiting_input` | 需要用户提供更多信息 |
+| 被阻塞 `blocked` | 遇到无法自行解决的障碍 |
+| 等待审核 `pending_review` | 阶段产出已完成，等待用户确认 |
+| 已完成 `completed` | 任务整体完成 |
 
-这里不是“用户一发消息就自动进入进行中”。  
-默认情况下，群任务状态主要由 leader 在合适时机显式输出状态标记来控制：
+状态由 leader 在回复末尾显式输出对应标记控制，不输出则保持不变：
 
-- 输出 `[TASK_IN_PROGRESS]`：把群状态切到 `in_progress`
-- 输出 `[TASK_COMPLETED]`：把群状态切到 `completed`
-- 不输出标记：群状态保持不变
+- `[TASK_IN_PROGRESS]` → 执行中
+- `[TASK_WAITING_INPUT]` → 等待输入
+- `[TASK_BLOCKED]` → 被阻塞
+- `[TASK_PENDING_REVIEW]` → 等待审核
+- `[TASK_COMPLETED]` → 已完成
 
-另外，用户也可以直接点击群聊头部的状态标签，手动切到：
-
-- `空闲`
-- `进行中`
-- `已完成`
-
-这个手动切换只是临时改当前值，不会抢走 leader 的控制权；leader 后续再次输出状态标记时，仍然会继续覆盖群状态。
+用户也可以直接点击群聊头部的状态标签手动切换到任意状态。手动切换只是临时改当前值，不会抢走 leader 的控制权；leader 后续再次输出状态标记时，仍然会继续覆盖群状态。
 
 #### 6. 超时提醒与恢复
 
@@ -604,21 +617,17 @@ leader 可以继续分派任务、催办成员、汇总阶段结果。
 #### 方式三：让 leader 汇总并结束
 
 当各角色都完成后，leader 可以总结结果。  
-如果任务确实完成，leader 应显式输出：
+leader 根据当前实际情况，在回复末尾输出对应状态标记（每条回复只输出一个）：
 
 ```text
-[TASK_COMPLETED]
+[TASK_IN_PROGRESS]      # 任务仍在推进
+[TASK_WAITING_INPUT]    # 需要用户提供更多信息
+[TASK_BLOCKED]          # 遇到无法自行解决的障碍
+[TASK_PENDING_REVIEW]   # 阶段产出已完成，等待用户确认
+[TASK_COMPLETED]        # 任务整体完成
 ```
 
-这样群任务状态才会切到 `completed`。
-
-如果任务还在持续推进、但当前需要继续协作，也应由 leader 显式输出：
-
-```text
-[TASK_IN_PROGRESS]
-```
-
-这样群任务状态会保持或切回 `in_progress`。
+不输出任何标记时，群状态保持不变。
 
 #### 方式四：查看群 Plan
 
@@ -652,7 +661,7 @@ leader 可以继续分派任务、催办成员、汇总阶段结果。
 这不是故障，而是设计行为。
 
 4. 任务完成最好由 leader 明确收口
-否则群任务可能会一直停留在 `in_progress`。
+否则群任务可能会一直停留在 `in_progress`。如果任务需要用户介入，leader 可输出 `[TASK_WAITING_INPUT]` 或 `[TASK_BLOCKED]` 来标明原因。
 
 5. 用户手动切状态只是临时纠偏
 它不会永久覆盖 leader；后续 leader 再次输出状态标记时，群状态仍会继续变化。
