@@ -13,6 +13,7 @@ const EMPTY_SETTINGS: AppSettingsView = {
   groupRoleWatchdogIntervalMs: 30_000,
   groupRoleBusyInspectAfterMs: 300_000,
   groupRoleBusyAbortAfterMs: 600_000,
+  groupRoleReInjectAfterReplies: 10,
 };
 
 export function AppSettingsDialog({
@@ -87,7 +88,8 @@ export function AppSettingsDialog({
     key:
       | "groupRoleWatchdogIntervalMs"
       | "groupRoleBusyInspectAfterMs"
-      | "groupRoleBusyAbortAfterMs",
+      | "groupRoleBusyAbortAfterMs"
+      | "groupRoleReInjectAfterReplies",
     value: string,
   ) {
     const parsed = Number.parseInt(value, 10);
@@ -100,7 +102,8 @@ export function AppSettingsDialog({
   const hasInvalidNumber =
     settings.groupRoleWatchdogIntervalMs <= 0 ||
     settings.groupRoleBusyInspectAfterMs <= 0 ||
-    settings.groupRoleBusyAbortAfterMs <= 0;
+    settings.groupRoleBusyAbortAfterMs <= 0 ||
+    settings.groupRoleReInjectAfterReplies <= 0;
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/30 px-4 backdrop-blur-[2px]">
@@ -182,6 +185,22 @@ export function AppSettingsDialog({
               disabled={isLoading || isSubmitting}
               onChange={(event) =>
                 updateNumberField("groupRoleBusyAbortAfterMs", event.target.value)
+              }
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[var(--ink-soft)]">
+              群成员提示词重注入间隔（每隔多少次回复）
+            </span>
+            <input
+              type="number"
+              min={1}
+              className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-base outline-none transition focus:border-[var(--accent)]"
+              value={settings.groupRoleReInjectAfterReplies}
+              disabled={isLoading || isSubmitting}
+              onChange={(event) =>
+                updateNumberField("groupRoleReInjectAfterReplies", event.target.value)
               }
             />
           </label>
