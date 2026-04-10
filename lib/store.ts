@@ -1511,7 +1511,7 @@ export async function listPanelMessages(panelId: string): Promise<MessageView[]>
 export async function setGroupPanelTaskState(
   panelId: string,
   taskState: GroupTaskState,
-  _source: "leader" | "manual" = "leader",
+  _source?: "leader" | "manual",
 ): Promise<PanelView> {
   return mutateData((draft) => {
     const panel = draft.panels.find((candidate) => candidate.id === panelId);

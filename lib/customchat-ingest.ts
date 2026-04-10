@@ -13,7 +13,6 @@ import { z } from "zod";
 import { publishCustomChatEvent } from "@/lib/customchat-events";
 import { shouldHideBridgeDeliveryNoiseText } from "@/lib/bridge-delivery";
 import {
-  normalizeGroupTaskState,
   messageMarksGroupTaskCompleted,
   messageMarksGroupTaskInProgress,
   messageMarksGroupTaskWaitingInput,
