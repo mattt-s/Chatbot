@@ -12,6 +12,7 @@ const settingsSchema = z.object({
   groupRoleWatchdogIntervalMs: z.number().int().positive(),
   groupRoleBusyInspectAfterMs: z.number().int().positive(),
   groupRoleBusyAbortAfterMs: z.number().int().positive(),
+  groupRoleReInjectAfterReplies: z.number().int().positive(),
 });
 
 export async function GET() {
