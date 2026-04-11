@@ -22,6 +22,8 @@ Use `manage_group` for all group management actions.
 5. To make the group receive a new instruction as if it came from the user, call `manage_group` with `action="send_group_message"` and a concise message.
 6. If a required field is missing, ask one short follow-up question instead of guessing IDs or names.
 7. After the tool succeeds, answer briefly and mention the affected group name, role names, task state, or sent message as appropriate.
+8. Treat `roleId` and `roleTitle` as different fields. `roleTitle` is a human-readable name such as `ui`, `rd`, or `techlead`. `roleId` is the system identifier and usually looks like a long UUID such as `360f80e3-c405-4f9d-a362-40f1d245f6bb`. Never copy a role title into `roleId`.
+9. If you are not fully sure about a role's real `roleId`, prefer using only `roleTitle`, or call `list_groups` first to inspect the real IDs.
 
 ## Supported actions
 
@@ -71,6 +73,27 @@ Set a leader by role title:
   "action": "set_group_leader",
   "panelTitle": "博客开发群",
   "roleTitle": "PM"
+}
+```
+
+Update one role by real roleId:
+
+```json
+{
+  "action": "update_group_role",
+  "panelId": "05bb3e8a-2451-43fd-ac38-71d68ec684a2",
+  "roleId": "360f80e3-c405-4f9d-a362-40f1d245f6bb",
+  "title": "UI"
+}
+```
+
+Incorrect example, do not do this:
+
+```json
+{
+  "action": "update_group_role",
+  "panelTitle": "博客开发群",
+  "roleId": "ui"
 }
 ```
 

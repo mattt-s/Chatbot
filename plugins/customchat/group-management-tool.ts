@@ -56,11 +56,13 @@ const MANAGE_GROUP_TOOL_SCHEMA = {
     },
     roleId: {
       type: "string",
-      description: "角色 ID。若不确定，可先 list_groups。",
+      description:
+        "角色 ID。只有在你明确知道真实角色 ID 时才填写；它通常是类似 360f80e3-c405-4f9d-a362-40f1d245f6bb 的长 UUID。不要把 ui、rd、techlead 这类角色名填到 roleId 里。若不确定，可先 list_groups，或仅传 roleTitle。",
     },
     roleTitle: {
       type: "string",
-      description: "角色名。仅在同群组内角色名唯一时可用于定位角色。",
+      description:
+        "角色名，例如 ui、rd、techlead。仅在同群组内角色名唯一时可用于定位角色。拿不准 roleId 时，优先传 roleTitle，不要把 roleTitle 复制到 roleId。",
     },
     roles: {
       type: "array",
@@ -207,7 +209,8 @@ export function registerCustomChatGroupManagementTool(api: CustomChatToolApi) {
     description:
       "Create and manage CustomChat groups and group roles in the ChatBot app. " +
       "Use this for creating or deleting groups, checking group task state, " +
-      "sending a user message into a group, adding/removing roles, setting leader, or listing groups/agents.",
+      "sending a user message into a group, adding/removing roles, setting leader, or listing groups/agents. " +
+      "When identifying a role, prefer roleTitle unless you already know the real UUID-like roleId; never place a short role name such as ui into roleId.",
     parameters: MANAGE_GROUP_TOOL_SCHEMA,
     execute: async (_toolCallId, rawParams) => {
       const { method, params } = normalizeAppRpcPayload(rawParams);
