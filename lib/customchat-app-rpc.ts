@@ -139,16 +139,21 @@ async function requireGroupPanelByReference(
 ) {
   const panelId = readTrimmedString(params, "panelId");
   if (panelId) {
-    const panel = await getPanelRecordForUser(userId, panelId);
+    let panel;
+    try {
+      panel = await getPanelRecordForUser(userId, panelId);
+    } catch {
+      throw new Error("群组不存在。");
+    }
     if ((panel.kind ?? "direct") !== "group") {
-      throw new Error("Panel is not a group panel.");
+      throw new Error("群组不存在。");
     }
     return panel;
   }
 
   const panelTitle = readTrimmedString(params, "panelTitle");
   if (!panelTitle) {
-    throw new Error("panelId or panelTitle is required.");
+    throw new Error("缺少群组标识，请提供 panelId 或 panelTitle。");
   }
 
   const panels = (await listPanelsForUser(userId, { includeMessages: false }))
@@ -156,10 +161,10 @@ async function requireGroupPanelByReference(
     .filter((panel) => panel.title.trim() === panelTitle);
 
   if (panels.length === 0) {
-    throw new Error("Group panel not found.");
+    throw new Error("群组不存在。");
   }
   if (panels.length > 1) {
-    throw new Error("Multiple group panels matched. Please provide panelId.");
+    throw new Error("匹配到多个同名群组，请提供 panelId。");
   }
 
   return getPanelRecordForUser(userId, panels[0].id);
@@ -174,7 +179,7 @@ async function requireGroupRoleByReference(
   const roleTitle = readTrimmedString(params, "roleTitle");
 
   if (!roleId && !roleTitle) {
-    throw new Error("roleId or roleTitle is required.");
+    throw new Error("缺少角色标识，请提供 roleId 或 roleTitle。");
   }
 
   const roles = await listGroupRoles(panel.id);
@@ -184,16 +189,16 @@ async function requireGroupRoleByReference(
 
   if (Array.isArray(matched)) {
     if (matched.length === 0) {
-      throw new Error("Group role not found.");
+      throw new Error("角色不存在。");
     }
     if (matched.length > 1) {
-      throw new Error("Multiple group roles matched. Please provide roleId.");
+      throw new Error("匹配到多个同名角色，请提供 roleId。");
     }
     return { panel, role: matched[0] };
   }
 
   if (!matched) {
-    throw new Error("Group role not found.");
+    throw new Error("角色不存在。");
   }
 
   return { panel, role: matched };
@@ -482,19 +487,19 @@ async function handleGetGroupMemory(user: SessionUser, params: AppRpcParams) {
 }
 
 async function handleUpdateGroupMemory(user: SessionUser, params: AppRpcParams) {
-  const panel = await requireGroupPanelByReference(user.id, params);
-  const roleId = readTrimmedString(params, "roleId", { required: true });
-  const roleTitle = readTrimmedString(params, "roleTitle", { required: true });
+  const { panel, role } = await requireGroupRoleByReference(user.id, params);
+  const roleTitle =
+    readTrimmedString(params, "roleTitle") ||
+    role.title;
   const content = readTrimmedString(params, "content", { required: true });
-  await updateGroupRoleMemory(panel.id, roleId, roleTitle, content);
-  return { ok: true, panelId: panel.id, roleId };
+  await updateGroupRoleMemory(panel.id, role.id, roleTitle, content);
+  return { ok: true, panelId: panel.id, roleId: role.id };
 }
 
 async function handleClearGroupMemory(user: SessionUser, params: AppRpcParams) {
-  const panel = await requireGroupPanelByReference(user.id, params);
-  const roleId = readTrimmedString(params, "roleId", { required: true });
-  await clearGroupRoleMemory(panel.id, roleId);
-  return { ok: true, panelId: panel.id, roleId };
+  const { panel, role } = await requireGroupRoleByReference(user.id, params);
+  await clearGroupRoleMemory(panel.id, role.id);
+  return { ok: true, panelId: panel.id, roleId: role.id };
 }
 
 /**

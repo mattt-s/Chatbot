@@ -20,6 +20,9 @@ const mockUnsetGroupRoleLeader = vi.fn();
 const mockUpdateGroupPanelPlan = vi.fn();
 const mockUpdateGroupRole = vi.fn();
 const mockClearGroupPanelPlan = vi.fn();
+const mockGetGroupPanelMemory = vi.fn();
+const mockUpdateGroupRoleMemory = vi.fn();
+const mockClearGroupRoleMemory = vi.fn();
 
 vi.mock("@/lib/agents", () => ({
   loadAgentCatalog: (...args: unknown[]) => mockLoadAgentCatalog(...args),
@@ -52,6 +55,9 @@ vi.mock("@/lib/store", () => ({
   updateGroupPanelPlan: (...args: unknown[]) => mockUpdateGroupPanelPlan(...args),
   updateGroupRole: (...args: unknown[]) => mockUpdateGroupRole(...args),
   clearGroupPanelPlan: (...args: unknown[]) => mockClearGroupPanelPlan(...args),
+  getGroupPanelMemory: (...args: unknown[]) => mockGetGroupPanelMemory(...args),
+  updateGroupRoleMemory: (...args: unknown[]) => mockUpdateGroupRoleMemory(...args),
+  clearGroupRoleMemory: (...args: unknown[]) => mockClearGroupRoleMemory(...args),
 }));
 
 describe("dispatchCustomChatAppRpc", () => {
@@ -208,6 +214,9 @@ describe("dispatchCustomChatAppRpc", () => {
       taskState: "idle",
       groupPlan: null,
     });
+    mockGetGroupPanelMemory.mockResolvedValue({});
+    mockUpdateGroupRoleMemory.mockResolvedValue(undefined);
+    mockClearGroupRoleMemory.mockResolvedValue(undefined);
     mockSubmitGroupMessage.mockResolvedValue({
       userMessage: {
         id: "msg-1",
@@ -219,6 +228,52 @@ describe("dispatchCustomChatAppRpc", () => {
         createdAt: "2026-01-01T00:00:00.000Z",
       },
     });
+  });
+
+  it("supports group_memory.update with roleTitle only", async () => {
+    const { dispatchCustomChatAppRpc } = await import("@/lib/customchat-app-rpc");
+
+    const result = await dispatchCustomChatAppRpc("group_memory.update", {
+      panelId: "panel-1",
+      roleTitle: "PM",
+      content: "负责推进需求澄清",
+    });
+
+    expect(mockUpdateGroupRoleMemory).toHaveBeenCalledWith(
+      "panel-1",
+      "role-pm",
+      "PM",
+      "负责推进需求澄清",
+    );
+    expect(result).toEqual({
+      ok: true,
+      panelId: "panel-1",
+      roleId: "role-pm",
+    });
+  });
+
+  it("fails fast with localized message when group does not exist", async () => {
+    mockGetPanelRecordForUser.mockRejectedValueOnce(new Error("Panel not found"));
+    const { dispatchCustomChatAppRpc } = await import("@/lib/customchat-app-rpc");
+
+    await expect(
+      dispatchCustomChatAppRpc("group_plan.get", {
+        panelId: "missing-panel",
+      }),
+    ).rejects.toThrow("群组不存在。");
+  });
+
+  it("fails fast with localized message when role does not exist", async () => {
+    mockListGroupRoles.mockResolvedValueOnce([]);
+    const { dispatchCustomChatAppRpc } = await import("@/lib/customchat-app-rpc");
+
+    await expect(
+      dispatchCustomChatAppRpc("group_memory.update", {
+        panelId: "panel-1",
+        roleTitle: "不存在的角色",
+        content: "probe",
+      }),
+    ).rejects.toThrow("角色不存在。");
   });
 
   it("group.create 创建群组并批量添加角色", async () => {

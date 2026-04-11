@@ -1360,7 +1360,19 @@ async function sendPortalRequestFrame(
           }),
         );
       });
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const retryable =
+        message === "customchat portal websocket not ready" ||
+        message === "customchat portal websocket closed during request" ||
+        message === "customchat portal websocket error during request" ||
+        message === "customchat portal websocket error" ||
+        message === "customchat portal websocket closed";
+
+      if (!retryable) {
+        throw error;
+      }
+
       resetPortalSocket();
       const delay =
         PORTAL_RECONNECT_BACKOFF_MS[
