@@ -12,6 +12,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
 
 import { abortProviderRun, inspectProviderSession } from "@/lib/customchat-provider";
 import { readEffectiveAppSettingsSync } from "@/lib/app-settings";
@@ -28,7 +29,7 @@ import {
   listInProgressGroupPanels,
   listPanelMessages,
 } from "@/lib/store";
-import type { StoredGroupRole } from "@/lib/types";
+import type { StoredAttachment, StoredGroupRole } from "@/lib/types";
 import { toCustomChatGroupRoleTarget } from "@/lib/utils";
 
 const log = createLogger("group-router");
@@ -41,8 +42,16 @@ interface QueuedMessage {
   senderType: "user" | "group-role";
   senderLabel: string;
   text: string;
+  attachments: StoredAttachment[];
   timestamp: number;
 }
+
+type InboundAttachmentInput = {
+  name: string;
+  mimeType: string;
+  content: string;
+  size: number;
+};
 
 interface BusyRoleState {
   runId: string;
@@ -676,6 +685,7 @@ async function flushQueue(panelId: string, groupRoleId: string, groupRoles: Stor
   const combined = queue
     .map((msg) => `[来自 ${msg.senderLabel}]:\n${msg.text}`)
     .join("\n\n");
+  const attachments = queue.flatMap((msg) => msg.attachments);
 
   const targetRole = groupRoles.find((r) => r.id === groupRoleId);
   if (!targetRole) return;
@@ -685,6 +695,7 @@ async function flushQueue(panelId: string, groupRoleId: string, groupRoles: Stor
     groupRoleId,
     agentId: targetRole.agentId,
     text: combined,
+    attachments,
     allRoles: groupRoles,
     targetRole,
     isFirstCall: needsInjection(panelId, groupRoleId),
@@ -715,6 +726,7 @@ async function dispatchToRole(params: {
   groupRoleId: string;
   agentId: string;
   text: string;
+  attachments?: StoredAttachment[];
   allRoles: StoredGroupRole[];
   targetRole: StoredGroupRole;
   isFirstCall: boolean;
@@ -731,6 +743,7 @@ async function dispatchToRole(params: {
 
   const messageId = crypto.randomUUID();
   const target = toCustomChatGroupRoleTarget(params.panelId, params.groupRoleId);
+  const inboundAttachments = await buildInboundAttachments(params.attachments ?? []);
 
   log.input("dispatchToRole", {
     panelId: params.panelId,
@@ -738,6 +751,7 @@ async function dispatchToRole(params: {
     agentId: params.agentId,
     target,
     textLen: String(params.text.length),
+    attachmentCount: String(inboundAttachments.length),
     isFirstCall: String(params.isFirstCall),
   });
 
@@ -747,6 +761,7 @@ async function dispatchToRole(params: {
     target,
     messageId,
     text: params.text,
+    attachments: inboundAttachments,
   });
 
   const runId = result.runId?.trim() || messageId;
@@ -772,6 +787,28 @@ async function dispatchToRole(params: {
   });
 }
 
+async function buildInboundAttachments(
+  attachments: StoredAttachment[],
+): Promise<InboundAttachmentInput[]> {
+  const inboundAttachments: InboundAttachmentInput[] = [];
+
+  for (const attachment of attachments) {
+    if (!attachment.storagePath) {
+      continue;
+    }
+
+    const bytes = await fs.readFile(attachment.storagePath);
+    inboundAttachments.push({
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      content: bytes.toString("base64"),
+      size: attachment.size,
+    });
+  }
+
+  return inboundAttachments;
+}
+
 // ────────────────────────────────────────────
 // Core routing
 // ────────────────────────────────────────────
@@ -794,6 +831,7 @@ export async function routeMessage(params: {
   senderLabel: string;
   senderGroupRoleId?: string;
   text: string;
+  attachments?: StoredAttachment[];
   dispatchInstructionText?: string;
   explicitMentionRoleIds?: string[];
   groupRoles: StoredGroupRole[];
@@ -831,6 +869,7 @@ export async function routeMessage(params: {
       senderType: params.senderType,
       senderLabel: params.senderLabel,
       text: instruction,
+      attachments: params.attachments ?? [],
       timestamp: Date.now(),
     };
 
@@ -858,6 +897,7 @@ export async function routeMessage(params: {
             groupRoleId: targetRole.id,
             agentId: targetRole.agentId,
             text: dispatchText,
+            attachments: params.attachments,
             allRoles: params.groupRoles,
             targetRole,
             isFirstCall,
@@ -906,6 +946,7 @@ export async function routeMessage(params: {
           groupRoleId: targetRole.id,
           agentId: targetRole.agentId,
           text: dispatchText,
+          attachments: params.attachments,
           allRoles: params.groupRoles,
           targetRole,
           isFirstCall,

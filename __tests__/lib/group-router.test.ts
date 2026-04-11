@@ -13,6 +13,9 @@
  * - markRoleIdle / resetInitializedRoles
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Mock dependencies
@@ -171,6 +174,51 @@ describe("group-router", () => {
       expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
         expect.objectContaining({
           target: "group:direct:p-grp:role:r-pm",
+        }),
+      );
+    });
+
+    it("用户消息附件会一起转发给 Leader", async () => {
+      const { routeMessage } = await import("@/lib/group-router");
+      const tempPath = path.join(os.tmpdir(), `group-router-attachment-${Date.now()}.png`);
+      const bytes = Buffer.from("fake-image-bytes");
+      await fs.writeFile(tempPath, bytes);
+
+      try {
+        await routeMessage({
+          panelId: "p-grp",
+          senderType: "user",
+          senderLabel: "用户",
+          text: "请看这张图",
+          attachments: [
+            {
+              id: "att-1",
+              name: "demo.png",
+              mimeType: "image/png",
+              size: bytes.byteLength,
+              kind: "image",
+              storagePath: tempPath,
+              sourceUrl: null,
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+          groupRoles: ALL_ROLES,
+        });
+      } finally {
+        await fs.unlink(tempPath).catch(() => undefined);
+      }
+
+      expect(mockSendInboundToPlugin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: "group:direct:p-grp:role:r-pm",
+          attachments: [
+            expect.objectContaining({
+              name: "demo.png",
+              mimeType: "image/png",
+              size: bytes.byteLength,
+              content: bytes.toString("base64"),
+            }),
+          ],
         }),
       );
     });

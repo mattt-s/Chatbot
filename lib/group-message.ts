@@ -100,6 +100,7 @@ export async function submitGroupMessage(
       senderType: "user",
       senderLabel: input.user.displayName,
       text: message,
+      attachments,
       dispatchInstructionText: routedInstructionText,
       groupRoles,
     });
