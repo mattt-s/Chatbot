@@ -3299,6 +3299,19 @@ export function buildCustomChatPlugin() {
     capabilities: {
       chatTypes: ["direct"],
     },
+    gateway: {
+      async startAccount({ abortSignal }: { abortSignal: AbortSignal }) {
+        if (abortSignal.aborted) {
+          return;
+        }
+
+        // Keep the channel runtime alive so OpenClaw health-monitor does not
+        // repeatedly treat customchat as a stopped channel and restart it.
+        await new Promise<void>((resolve) => {
+          abortSignal.addEventListener("abort", () => resolve(), { once: true });
+        });
+      },
+    },
     config: {
       listAccountIds(cfg: { channels?: { customchat?: unknown } } | undefined) {
         const channelConfig = asJsonRecord(cfg?.channels?.customchat);
