@@ -8,6 +8,13 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  GROUP_TASK_COMPLETION_MARKER,
+  GROUP_TASK_IN_PROGRESS_MARKER,
+  GROUP_TASK_WAITING_INPUT_MARKER,
+  GROUP_TASK_BLOCKED_MARKER,
+  GROUP_TASK_PENDING_REVIEW_MARKER,
+} from "@/lib/group-task";
 import type { StoredGroupRole } from "@/lib/types";
 
 /**
@@ -110,7 +117,10 @@ function isTaskStateMarkerLine(line: string): boolean {
   const trimmed = line.trim();
   return (
     trimmed === GROUP_TASK_IN_PROGRESS_MARKER ||
-    trimmed === GROUP_TASK_COMPLETION_MARKER
+    trimmed === GROUP_TASK_COMPLETION_MARKER ||
+    trimmed === GROUP_TASK_WAITING_INPUT_MARKER ||
+    trimmed === GROUP_TASK_BLOCKED_MARKER ||
+    trimmed === GROUP_TASK_PENDING_REVIEW_MARKER
   );
 }
 
@@ -146,17 +156,17 @@ function parseMentionLine(
   return matches;
 }
 
-const PROMPT_DIR = path.join(process.cwd(), “prompt”);
+const PROMPT_DIR = path.join(process.cwd(), "prompt");
 
 function loadPromptTemplate(filename: string): string {
-  return fs.readFileSync(path.join(PROMPT_DIR, filename), “utf-8”);
+  return fs.readFileSync(path.join(PROMPT_DIR, filename), "utf-8");
 }
 
 function applyTemplateVars(
   template: string,
   vars: Record<string, string>,
 ): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? “”);
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
 
 /**
@@ -167,7 +177,7 @@ function applyTemplateVars(
  * @param {{ id: string; title: string }} [params.groupPanel] - 当前群组面板信息
  * @param {StoredGroupRole} params.targetRole - 目标角色
  * @param {StoredGroupRole[]} params.allRoles - 群组内所有角色
- * @param {{ type: “user” | “group-role”; name: string }} params.sender - 发送者信息
+ * @param {{ type: "user" | "group-role"; name: string }} params.sender - 发送者信息
  * @param {string} params.instruction - 去除 @mention 后的正文
  * @param {boolean} params.isFirstCall - 是否为该角色的首次调用
  * @returns {string} 构造好的消息文本
@@ -176,7 +186,7 @@ export function buildDispatchMessage(params: {
   groupPanel?: { id: string; title: string };
   targetRole: StoredGroupRole;
   allRoles: StoredGroupRole[];
-  sender: { type: “user” | “group-role”; name: string };
+  sender: { type: "user" | "group-role"; name: string };
   instruction: string;
   isFirstCall: boolean;
 }): string {
@@ -188,31 +198,31 @@ export function buildDispatchMessage(params: {
     const otherMembers = params.allRoles
       .filter((r) => r.id !== params.targetRole.id && r.enabled)
       .map((r) => (r.isLeader ? `- ${r.title}（组长）` : `- ${r.title}`))
-      .join(“\n”);
+      .join("\n");
 
     const groupLocation = params.groupPanel
       ? `群组 ${params.groupPanel.title}（id: ${params.groupPanel.id}）`
-      : “一个群组”;
+      : "一个群组";
 
     const commonVars: Record<string, string> = {
       GROUP_LOCATION: groupLocation,
       ROLE_NAME: params.targetRole.title,
-      ROLE_LEADER_SUFFIX: isLeader ? “，你是本群组的组长” : “”,
+      ROLE_LEADER_SUFFIX: isLeader ? "，你是本群组的组长" : "",
       OTHER_MEMBERS: otherMembers,
     };
 
-    parts.push(applyTemplateVars(loadPromptTemplate(“group-injection-common.md”), commonVars));
+    parts.push(applyTemplateVars(loadPromptTemplate("group-injection-common.md"), commonVars));
 
     if (isLeader) {
-      parts.push(loadPromptTemplate(“group-injection-leader.md”));
+      parts.push(loadPromptTemplate("group-injection-leader.md"));
     }
 
-    parts.push(“”);
+    parts.push("");
   }
 
   const senderLabel =
-    params.sender.type === “user” ? “用户” : params.sender.name;
+    params.sender.type === "user" ? "用户" : params.sender.name;
   parts.push(`[来自 ${senderLabel}]:`, params.instruction);
 
-  return parts.join(“\n”);
+  return parts.join("\n");
 }
