@@ -259,9 +259,14 @@ const PORTAL_RECONNECT_BACKOFF_MS = [250, 500, 1_000, 2_000, 4_000];
 const RESTORED_TRACKED_RUN_LIMIT = 16;
 const GATEWAY_SUBSCRIBER_CONNECT_TIMEOUT_MS = 5_000;
 const GATEWAY_SUBSCRIBER_START_DELAY_MS = 1_500;
+const RECENT_ANNOUNCE_TTL_MS = 15_000;
 
 let cachedGatewayDeviceIdentity: GatewayDeviceIdentity | null | undefined;
 const { trackedRuns } = customChatRuntimeStore;
+const recentAnnounceDeliveries = new Map<
+  string,
+  { atMs: number; runId: string; text: string }
+>();
 
 function resolveTargetFromControlParams(input: CustomChatControlParams) {
   return normalizeChannelTarget(input.target || `channel:${input.panelId || ""}`);
@@ -1234,6 +1239,66 @@ function forgetTrackedRun(runId: string) {
 }
 
 /**
+ * OpenClaw 某些 subagent announce 场景下会出现“双通道完成态”：
+ * 1. Gateway 先以 `announce:v1:...` runId 把最终回复流式推给当前 session；
+ * 2. 随后宿主又通过 channel outbound 触发一次 `sendText()`，
+ *    这次没有原始 runId，最终在 app 里落成一条新的 `customchat:...` 消息。
+ *
+ * 对 app 来说，这两条消息文本一致、目标一致，因此会被看成“重复回复”。
+ * 这里做的是一个很窄的去重：
+ * - 只记录最近 15 秒内的 `announce:v1:...` 最终文本
+ * - 只在“没有 runId、没有附件、目标相同、文本完全相同”时判定为重复补发
+ * - 保留前面的 announce SSE 流式效果，只抑制后面的 customchat 终态补发
+ */
+function normalizeAnnounceDedupeTarget(target: string) {
+  return target.trim().toLowerCase();
+}
+
+function pruneRecentAnnounceDeliveries(nowMs = Date.now()) {
+  for (const [target, entry] of recentAnnounceDeliveries.entries()) {
+    if (nowMs - entry.atMs > RECENT_ANNOUNCE_TTL_MS) {
+      recentAnnounceDeliveries.delete(target);
+    }
+  }
+}
+
+function rememberRecentAnnounceDelivery(target: string, runId: string, text: string) {
+  const normalizedTarget = normalizeAnnounceDedupeTarget(target);
+  if (!normalizedTarget || !text.trim()) {
+    return;
+  }
+  const nowMs = Date.now();
+  pruneRecentAnnounceDeliveries(nowMs);
+  recentAnnounceDeliveries.set(normalizedTarget, {
+    atMs: nowMs,
+    runId,
+    text,
+  });
+  pluginLog("delivery", "rememberRecentAnnounceDelivery", "→ stored", {
+    target: normalizedTarget,
+    runId,
+    textLen: String(text.length),
+  });
+}
+
+function matchRecentAnnounceDuplicate(target: string, text: string) {
+  const normalizedTarget = normalizeAnnounceDedupeTarget(target);
+  if (!normalizedTarget || !text.trim()) {
+    return null;
+  }
+  const nowMs = Date.now();
+  pruneRecentAnnounceDeliveries(nowMs);
+  const matched = recentAnnounceDeliveries.get(normalizedTarget);
+  if (!matched) {
+    return null;
+  }
+  if (matched.text !== text || nowMs - matched.atMs > RECENT_ANNOUNCE_TTL_MS) {
+    return null;
+  }
+  return matched;
+}
+
+/**
  * 递增 TrackedRun 的序列号并更新最后事件时间戳。
  * 序列号用于保证投递消息的顺序（seq guard）。
  * @param {TrackedRun} trackedRun - 跟踪的运行实例
@@ -1258,10 +1323,14 @@ async function sendPortalDelivery(
 ) {
   pluginLog("delivery", "sendPortalDelivery", "← input", {
     target: payload.target,
+    sessionKey: payload.sessionKey,
     runId: payload.runId,
+    messageId: payload.messageId,
     state: payload.state,
     seq: String(payload.seq),
     textLen: String((payload.text ?? "").length),
+    attachments: String(Array.isArray(payload.attachments) ? payload.attachments.length : 0),
+    runtimeSteps: String(Array.isArray(payload.runtimeSteps) ? payload.runtimeSteps.length : 0),
   });
   return new Promise<unknown>((resolve, reject) => {
     const requestId = `${payload.runId}:${payload.seq}:${payload.state}:${crypto.randomUUID()}`;
@@ -2219,11 +2288,30 @@ async function handleTrackedGatewayChatEvent(payload: JsonRecord) {
   const sessionKey =
     typeof payload.sessionKey === "string" ? payload.sessionKey.trim() : "";
   const chatState = typeof payload.state === "string" ? payload.state : "";
+  const chatMessage = asJsonRecord(payload.message);
   pluginLog("chat-event", "handleTrackedGatewayChatEvent", "← input", {
     runId,
     sessionKey,
     state: chatState,
     textLen: String(typeof payload.text === "string" ? payload.text.length : 0),
+  });
+  pluginLog("chat-event", "handleTrackedGatewayChatEvent", "← message-meta", {
+    provider: typeof chatMessage.provider === "string" ? chatMessage.provider : "",
+    model: typeof chatMessage.model === "string" ? chatMessage.model : "",
+    api: typeof chatMessage.api === "string" ? chatMessage.api : "",
+    role: typeof chatMessage.role === "string" ? chatMessage.role : "",
+    sourceTool: typeof chatMessage.sourceTool === "string" ? chatMessage.sourceTool : "",
+    sourceSessionKey:
+      typeof chatMessage.sourceSessionKey === "string" ? chatMessage.sourceSessionKey : "",
+    hasProvenance: chatMessage.provenance != null,
+    provenanceKeys:
+      chatMessage.provenance && typeof chatMessage.provenance === "object"
+        ? Object.keys(chatMessage.provenance as JsonRecord).join(",")
+        : "",
+    metadataKeys:
+      chatMessage.metadata && typeof chatMessage.metadata === "object"
+        ? Object.keys(chatMessage.metadata as JsonRecord).join(",")
+        : "",
   });
   if (!runId || !sessionKey || isDeliveryMirrorMessage(payload.message)) {
     pluginLog("chat-event", "handleTrackedGatewayChatEvent", "→ skipped", { runId, sessionKey, reason: "empty or mirror" });
@@ -2280,7 +2368,6 @@ async function handleTrackedGatewayChatEvent(payload: JsonRecord) {
   clearTrackedRunTimer(trackedRun);
 
   const accountConfig = await resolveDefaultAccountConfig();
-  const chatMessage = asJsonRecord(payload.message);
   const text = extractTextFromMessagePayload(chatMessage);
   if (text) {
     trackedRun.latestAssistantText = text;
@@ -2298,6 +2385,15 @@ async function handleTrackedGatewayChatEvent(payload: JsonRecord) {
   // Final: flush any pending delta, then emit the final text bubble.
   // Tool-call bubbles are now emitted in real time via stream=tool events.
   await flushTrackedRunDelta(accountConfig, trackedRun, true).catch(() => null);
+  // 记录最近一次 announce:v1 最终态，供 deliverMessage() 识别
+  // 随后由宿主 OpenClaw 触发的重复 outbound sendText 补发。
+  if (trackedRun.runId.startsWith("announce:v1:") && trackedRun.latestAssistantText.trim()) {
+    rememberRecentAnnounceDelivery(
+      trackedRun.target,
+      trackedRun.runId,
+      trackedRun.latestAssistantText,
+    );
+  }
   await emitTrackedRunState(
     accountConfig,
     trackedRun,
@@ -2364,13 +2460,38 @@ async function startGatewaySubscriberClient() {
     },
     onEvent: (frame) => {
       void (async () => {
+        const payload = asJsonRecord(frame.payload);
+        pluginLog("gateway-event", "startGatewaySubscriberClient", "← frame", {
+          event: typeof frame.event === "string" ? frame.event : "",
+          runId:
+            typeof payload.runId === "string"
+              ? payload.runId
+              : "",
+          sessionKey:
+            typeof payload.sessionKey === "string"
+              ? payload.sessionKey
+              : "",
+          stream:
+            typeof payload.stream === "string"
+              ? payload.stream
+              : "",
+          state:
+            typeof payload.state === "string"
+              ? payload.state
+              : "",
+          payloadKeys: Object.keys(payload).join(","),
+        });
         if (frame.event === "chat") {
-          await handleTrackedGatewayChatEvent(asJsonRecord(frame.payload));
+          await handleTrackedGatewayChatEvent(payload);
           return;
         }
         if (frame.event === "agent") {
-          await handleTrackedGatewayAgentEvent(asJsonRecord(frame.payload));
+          await handleTrackedGatewayAgentEvent(payload);
+          return;
         }
+        pluginLog("gateway-event", "startGatewaySubscriberClient", "→ ignored", {
+          event: typeof frame.event === "string" ? frame.event : "",
+        });
       })().catch((error) => {
         console.error("[customchat] gateway subscriber frame failure", error);
       });
@@ -2408,6 +2529,13 @@ function ensureGatewaySubscriber() {
 async function launchChatTurn(input: LaunchChatTurnInput) {
   const startedAtMs = Date.now();
   const expectedSessionKey = buildCanonicalSessionKey(input.agentId, input.target);
+  pluginLog("inbound", "launchChatTurn", "→ sendGatewayChatTurn", {
+    agentId: input.agentId,
+    target: input.target,
+    expectedSessionKey,
+    messageId: input.messageId,
+    textLen: String(input.message.length),
+  });
   const payload = await sendGatewayChatTurn({
     sessionKey: expectedSessionKey,
     idempotencyKey: input.messageId,
@@ -2430,6 +2558,14 @@ async function launchChatTurn(input: LaunchChatTurnInput) {
       expectedSessionKey,
       startedAtMs,
     })) || expectedSessionKey;
+
+  pluginLog("inbound", "launchChatTurn", "← result", {
+    agentId: input.agentId,
+    target: input.target,
+    runId,
+    sessionKey,
+    expectedSessionKey,
+  });
 
   return {
     runId,
@@ -2564,6 +2700,19 @@ async function postDelivery(accountConfig: AccountConfig, body: JsonRecord) {
     throw new Error("customchat delivery requires target, sessionKey, and runId");
   }
 
+  pluginLog("delivery", "postDelivery", "→ normalized", {
+    target,
+    sessionKey,
+    runId,
+    messageId,
+    state,
+    seq: String(seq),
+    textLen: String(text.length),
+    attachments: String(attachments.length),
+    runtimeSteps: String(Array.isArray(runtimeSteps) ? runtimeSteps.length : 0),
+    bodyKeys: Object.keys(body).join(","),
+  });
+
   return sendPortalDelivery(accountConfig, {
     target,
     sessionKey,
@@ -2594,6 +2743,35 @@ async function deliverMessage(input: unknown, accountConfig: AccountConfig, ctxR
   const runId = extractRunId(input) || ctxRunId?.trim() || null;
   const sessionKeyHint = extractSessionKeyHint(input);
   const messageId = buildMessageId(input);
+  const inputRecord = asJsonRecord(input);
+  const stackPreview = (new Error().stack || "")
+    .split("\n")
+    .slice(2, 6)
+    .map((line) => line.trim())
+    .join(" | ");
+  pluginLog("delivery", "deliverMessage", "← input", {
+    ctxRunId: ctxRunId || "",
+    extractedRunId: runId || "",
+    messageId,
+    state:
+      typeof inputRecord.state === "string"
+        ? inputRecord.state
+        : "",
+    role:
+      typeof inputRecord.role === "string"
+        ? inputRecord.role
+        : "",
+    sourceTool:
+      typeof inputRecord.sourceTool === "string"
+        ? inputRecord.sourceTool
+        : "",
+    sourceSessionKey:
+      typeof inputRecord.sourceSessionKey === "string"
+        ? inputRecord.sourceSessionKey
+        : "",
+    inputKeys: Object.keys(inputRecord).join(","),
+    stack: stackPreview,
+  });
   const explicitTarget = (() => {
     try {
       return extractTarget(input);
@@ -2642,6 +2820,42 @@ async function deliverMessage(input: unknown, accountConfig: AccountConfig, ctxR
       : "main");
   const sessionKey = buildCanonicalSessionKey(agentId, target);
 
+  pluginLog("delivery", "deliverMessage", "→ resolved", {
+    target,
+    explicitTarget: explicitTarget || "",
+    rememberedTarget: remembered?.target || "",
+    rememberedAgentId: remembered?.agentId || "",
+    agentId,
+    runId: runId || "",
+    messageId,
+    sessionKey,
+    sessionKeyHint: sessionKeyHint || "",
+    textLen: String(text.length),
+    attachments: String(attachments.length),
+  });
+
+  const matchedAnnounce =
+    !runId && attachments.length === 0 ? matchRecentAnnounceDuplicate(target, text) : null;
+  if (matchedAnnounce) {
+    // 这里拦的是 OpenClaw 宿主在 subagent announce 结束后补发的第二条完整文本。
+    // 第一条 announce:v1 SSE 已经成功展示，所以直接短路返回，避免 app 落两条相同回复。
+    pluginLog("delivery", "deliverMessage", "→ suppressed-duplicate-announce", {
+      target,
+      messageId,
+      matchedRunId: matchedAnnounce.runId,
+      textLen: String(text.length),
+      ageMs: String(Date.now() - matchedAnnounce.atMs),
+    });
+    return {
+      ok: true,
+      suppressed: true,
+      reason: "duplicate-announce-followup",
+      target,
+      matchedRunId: matchedAnnounce.runId,
+      messageId,
+    };
+  }
+
   await rememberRouteBinding({
     target,
     agentId,
@@ -2679,6 +2893,14 @@ async function processInboundPayload(parsed: InboundRequestPayload) {
 
   const messageId = parsed.messageId?.trim() || `customchat:${crypto.randomUUID()}`;
   const attachments = Array.isArray(parsed.attachments) ? parsed.attachments : [];
+  pluginLog("inbound", "processInboundPayload", "← input", {
+    target,
+    panelId: parsed.panelId || "",
+    agentId: parsed.agentId || "",
+    messageId,
+    textLen: String((parsed.text || "").length),
+    attachments: String(attachments.length),
+  });
   const materialized = await materializeInboundAttachments(
     target,
     messageId,
@@ -2713,6 +2935,16 @@ async function processInboundPayload(parsed: InboundRequestPayload) {
     expectedSessionKey: launched.expectedSessionKey,
   });
   ensureGatewaySubscriber();
+
+  pluginLog("inbound", "processInboundPayload", "← launched", {
+    target,
+    agentId,
+    messageId,
+    runId: launched.runId,
+    sessionKey: launched.sessionKey,
+    expectedSessionKey: launched.expectedSessionKey,
+    files: String(materialized.files.length),
+  });
 
   return {
     ok: true,
@@ -3357,14 +3589,53 @@ export function buildCustomChatPlugin() {
       },
       async sendText(input: unknown, ctx: ChannelContext | undefined) {
         const accountConfig = await resolveDefaultAccountConfig();
+        const inputRecord = asJsonRecord(input);
+        pluginLog("outbound", "sendText", "← input", {
+          ctxRunId: ctx?.runId || "",
+          to:
+            typeof inputRecord.to === "string"
+              ? inputRecord.to
+              : "",
+          textLen:
+            typeof inputRecord.text === "string"
+              ? String(inputRecord.text.length)
+              : "0",
+          inputKeys: Object.keys(inputRecord).join(","),
+        });
         return deliverMessage(input, accountConfig, ctx?.runId);
       },
       async sendMedia(input: unknown, ctx: ChannelContext | undefined) {
         const accountConfig = await resolveDefaultAccountConfig();
+        const inputRecord = asJsonRecord(input);
+        pluginLog("outbound", "sendMedia", "← input", {
+          ctxRunId: ctx?.runId || "",
+          to:
+            typeof inputRecord.to === "string"
+              ? inputRecord.to
+              : "",
+          textLen:
+            typeof inputRecord.text === "string"
+              ? String(inputRecord.text.length)
+              : "0",
+          inputKeys: Object.keys(inputRecord).join(","),
+        });
         return deliverMessage(input, accountConfig, ctx?.runId);
       },
       async sendMessage(input: unknown, ctx: ChannelContext | undefined) {
         const accountConfig = await resolveDefaultAccountConfig();
+        const inputRecord = asJsonRecord(input);
+        pluginLog("outbound", "sendMessage", "← input", {
+          ctxRunId: ctx?.runId || "",
+          to:
+            typeof inputRecord.to === "string"
+              ? inputRecord.to
+              : "",
+          textLen:
+            typeof inputRecord.text === "string"
+              ? String(inputRecord.text.length)
+              : "0",
+          inputKeys: Object.keys(inputRecord).join(","),
+        });
         return deliverMessage(input, accountConfig, ctx?.runId);
       },
     },

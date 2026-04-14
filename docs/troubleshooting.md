@@ -17,6 +17,7 @@
 - [8. 停止推理（Abort）异常](#8-停止推理abort异常)
 - [9. WebSocket Bridge 连接异常](#9-websocket-bridge-连接异常)
 - [10. Gateway 订阅异常](#10-gateway-订阅异常)
+- [11. OpenClaw subagent announce 导致回复重复](#11-openclaw-subagent-announce-导致回复重复)
 
 ---
 
@@ -703,6 +704,121 @@ cat storage/openclaw-device-auth.json
 
 ---
 
+## 11. OpenClaw subagent announce 导致回复重复
+
+### 现象
+
+- app 里连续出现两条内容几乎完全一样的 assistant 回复
+- 第一条是流式输出，`runId` 形如 `announce:v1:...`
+- 第二条通常在第一条结束后立刻出现，`runId` 形如 `customchat:...`
+
+### 结论
+
+这不是 app 自己重复渲染，也不是 Gateway 又额外推了一次同一个 `chat` 事件。
+
+我们在线上排查时确认过：
+
+- Gateway 订阅流里只看到了 `announce:v1:...` 的 `agent/chat` 事件
+- `customchat:...` 这条是宿主 OpenClaw 在 subagent announce 完成后，又走了一次 channel outbound `sendText()`
+- 也就是说，重复来自“同一段最终内容被两条不同链路送到了 app”
+
+### 典型链路
+
+```mermaid
+flowchart TD
+    A["subagent 完成"] --> B["OpenClaw 先发送 announce:v1 SSE"]
+    B --> C["customchat 订阅 Gateway chat 事件"]
+    C --> D["app 先显示流式回复"]
+    A --> E["OpenClaw 随后触发 channel outbound sendText()"]
+    E --> F["customchat deliverMessage()"]
+    F --> G["若不去重，app 会再落一条 customchat:... 完整回复"]
+```
+
+### 排查流程
+
+**Step 1：确认 app 里是否真有两条不同 runId**
+
+```bash
+python3 - <<'PY'
+import json
+with open('storage/app-data.json', 'r', encoding='utf-8') as fh:
+    data = json.load(fh)
+for m in data.get('messages', [])[-50:]:
+    if m.get('role') == 'assistant':
+        print(m.get('panelId'), m.get('runId'), m.get('state'), (m.get('text') or '')[:80])
+PY
+```
+
+重点看是否存在一前一后两条：
+
+- `announce:v1:...`
+- `customchat:...`
+
+**Step 2：确认 Gateway 是否真的只发了 announce**
+
+先开启 plugin debug：
+
+```json
+{
+  "channels": {
+    "customchat": {
+      "debug": true
+    }
+  }
+}
+```
+
+然后看日志：
+
+```bash
+journalctl --user -u openclaw-gateway --since "10 min ago" | grep '\[customchat:gateway-event\]'
+```
+
+如果只看到 `runId=announce:v1:...`，没有任何 `runId=customchat:...` 的 Gateway frame，说明第二条不是 Gateway 订阅直接推过来的。
+
+**Step 3：确认是不是 plugin outbound 补发**
+
+```bash
+journalctl --user -u openclaw-gateway --since "10 min ago" | grep -E 'suppressed-duplicate-announce|deliverMessage|outbound sendText'
+```
+
+关键判断点：
+
+- 有 `outbound sendText ← input`
+- 随后有 `deliverMessage ← input`
+- 如果去重逻辑生效，会看到 `suppressed-duplicate-announce`
+
+### 解决方法
+
+我们在 `customchat` 插件里增加了一层“窄去重”：
+
+- 当 `handleTrackedGatewayChatEvent()` 收到 `announce:v1:...` 的最终态时，记录最近一次最终文本
+- 当 `deliverMessage()` 准备投递另一条消息时，如果满足以下条件，就判断为重复补发并直接拦截：
+  - 没有 `runId`
+  - 没有附件
+  - target 相同
+  - 文本完全相同
+  - 距离最近一次 `announce:v1:...` 最终态不超过 15 秒
+
+这个方案的目标是：
+
+- 保留 `announce:v1:...` 的 SSE 流式体验
+- 只抑制后面那条重复的 `customchat:...` 终态消息
+- 不影响普通 channel outbound 或带附件消息
+
+### 对应代码位置
+
+- 去重缓存与注释：
+  [`plugins/customchat/plugin-runtime.ts`](/Users/siyushi/IdeaProjects/ChatBot/plugins/customchat/plugin-runtime.ts)
+- announce 最终态记录：
+  [`plugins/customchat/plugin-runtime.ts`](/Users/siyushi/IdeaProjects/ChatBot/plugins/customchat/plugin-runtime.ts)
+- 重复补发拦截：
+  [`plugins/customchat/plugin-runtime.ts`](/Users/siyushi/IdeaProjects/ChatBot/plugins/customchat/plugin-runtime.ts)
+
+如果后续升级 OpenClaw 后宿主行为变化，这一节可以作为回归检查入口：先确认 Gateway frame 里是否仍然只有 `announce:v1:...`，再决定是否保留这层去重。
+
+---
+
 ## 快速定位表
 
 | 现象 | 先查什么 | 开启哪些模块日志 |
@@ -716,6 +832,7 @@ cat storage/openclaw-device-auth.json
 | 停止无效 | `abortProviderRun` 结果 | `provider,store` |
 | Bridge 断连 | shared secret 一致性 | `bridge` |
 | 无 Gateway 事件 | Gateway 进程 + 设备认证 | Plugin debug |
+| assistant 重复回复（一条 `announce:v1` 一条 `customchat`） | 是否是 OpenClaw subagent announce 双链路完成态 | Plugin debug |
 
 ---
 
