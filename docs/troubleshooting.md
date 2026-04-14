@@ -18,6 +18,7 @@
 - [9. WebSocket Bridge 连接异常](#9-websocket-bridge-连接异常)
 - [10. Gateway 订阅异常](#10-gateway-订阅异常)
 - [11. OpenClaw subagent announce 导致回复重复](#11-openclaw-subagent-announce-导致回复重复)
+- [12. ACP Background Task Done 提示消息](#12-acp-background-task-done-提示消息)
 
 ---
 
@@ -819,6 +820,123 @@ journalctl --user -u openclaw-gateway --since "10 min ago" | grep -E 'suppressed
 
 ---
 
+## 12. ACP Background Task Done 提示消息
+
+### 现象
+
+- app 里出现一条很短的 assistant 消息：
+  - `Background task done: ACP background task (run xxxx).`
+- 有时失败场景会出现：
+  - `Background task failed: ACP background task (run xxxx). ...`
+- 这条消息通常早于对应的 `announce:v1:...` 正文结果出现
+
+### 结论
+
+这条消息不是 `announce:v1:...` 正文，也不是 customchat 插件自己拼出来的文案。
+
+我们排查到的实际行为是：
+
+- 上游会先有一个 ACP 子会话自己的原始 run，例如 `918689f6-...`
+- 这个原始 ACP run 的 Gateway `agent/chat` 流，`customchat` 插件可以看到
+- 但它的 `sessionKey` 是 ACP 自己的 session，例如 `agent:codex:acp:...`
+- 因为它不是当前 customchat 面板的 tracked run，插件不会把这条原始 run 直接当作面板正文渲染
+- 随后上游又会通过 channel outbound 发来一条普通 `sendText()`，文本就是 `Background task done: ...`
+- customchat 插件把这条 `sendText()` 当成普通 assistant 消息投递给 app，于是形成 `customchat:<uuid>` 这条短提示
+
+### 投递方式
+
+从 customchat 插件视角，这条消息的投递方式和之前“重复正文 `customchat:...`”是同一类 transport：
+
+- 都不是 `handleTrackedGatewayChatEvent()` 处理的面板 chat 流正文
+- 都是通过 channel outbound `sendText()` 进入 `deliverMessage()`
+- 都会生成新的 `customchat:<uuid>` runId
+- 然后走 `postDelivery()` -> `sendPortalDelivery()`
+
+但它和重复正文不是同一种消息语义：
+
+- 重复正文 `customchat:...`
+  - 文本与 `announce:v1:...` 正文相同
+  - 属于补发的完整正文
+  - 现在已由去重逻辑 suppress
+- `Background task done: ...`
+  - 是独立的后台任务完成提示
+  - 文本与正文不同
+  - 目前不会命中 announce 去重逻辑
+
+### 典型时序
+
+```mermaid
+flowchart TD
+    A["ACP 子会话 run 完成"] --> B["Gateway 产生 ACP 原始 run 事件"]
+    B --> C["customchat 插件能看到 runId=xxxx 的原始 agent/chat 流"]
+    C --> D["但因无 trackedRun，不作为面板正文展示"]
+    A --> E["上游额外发一条 channel outbound sendText()"]
+    E --> F["customchat deliverMessage()"]
+    F --> G["app 落一条 customchat:... 的 Background task done 提示"]
+    A --> H["之后 announce:v1... 正文结果再流式展示"]
+```
+
+### 排查流程
+
+**Step 1：确认 app 存储里的提示消息**
+
+```bash
+python3 - <<'PY'
+import json
+with open('storage/app-data.json', 'r', encoding='utf-8') as fh:
+    data = json.load(fh)
+for m in data.get('messages', []):
+    text = m.get('text') or ''
+    if 'Background task done' in text or 'ACP background task' in text:
+        print(m.get('createdAt'), m.get('panelId'), m.get('runId'), m.get('state'), text)
+PY
+```
+
+**Step 2：确认它不是当前面板的 tracked run chat 流**
+
+```bash
+journalctl --user -u openclaw-gateway --since "10 min ago" | grep 'assistant event ignored: no trackedRun\|chat] no trackedRun'
+```
+
+如果同时能看到：
+
+- 原始 ACP run 的 `runId=<短 UUID>`
+- `sessionKey=agent:codex:acp:...`
+- `no trackedRun`
+
+就说明插件确实看到了原始后台 run，但没有把它当作当前面板正文。
+
+**Step 3：确认它是普通 sendText() 投递**
+
+```bash
+journalctl --user -u openclaw-gateway --since "10 min ago" | grep -E 'deliverMessage ← input|postDelivery -> normalized|sendPortalDelivery <- input|Background task'
+```
+
+关键判断点：
+
+- `deliverMessage ← input`
+- `messageId = customchat:<uuid>`
+- `textLen` 很短
+- 最后 `runId = customchat:<uuid>`
+
+### 当前处理策略
+
+当前结论是：**暂不处理**。
+
+原因是：
+
+- 这条消息不是正文重复，而是另一类独立通知
+- 它能帮助识别 ACP background task 的完成/失败
+- 目前我们只修了“announce 正文重复补发”问题，没有对这类后台任务提示做过滤、归并或降噪
+
+如果未来产品上决定要弱化这类提示，再单独评估：
+
+- 是否直接过滤
+- 是否只保留失败提示
+- 是否和后续 `announce:v1:...` 正文归并
+
+---
+
 ## 快速定位表
 
 | 现象 | 先查什么 | 开启哪些模块日志 |
@@ -833,6 +951,7 @@ journalctl --user -u openclaw-gateway --since "10 min ago" | grep -E 'suppressed
 | Bridge 断连 | shared secret 一致性 | `bridge` |
 | 无 Gateway 事件 | Gateway 进程 + 设备认证 | Plugin debug |
 | assistant 重复回复（一条 `announce:v1` 一条 `customchat`） | 是否是 OpenClaw subagent announce 双链路完成态 | Plugin debug |
+| 出现 `Background task done: ACP background task (...)` | 是否为上游 background task 完成提示，经 channel outbound `sendText()` 投递 | Plugin debug |
 
 ---
 
