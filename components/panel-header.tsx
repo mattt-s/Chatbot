@@ -34,6 +34,8 @@ interface PanelHeaderProps {
   onManageGroupRoles?: () => void;
   /** 群组专用：查看 Plan */
   onOpenGroupPlan?: () => void;
+  /** 群组专用：查看记忆板 */
+  onOpenGroupMemory?: () => void;
   /** 群组专用：手动切换群任务状态 */
   onSelectTaskState?: (selection: GroupTaskState) => void;
 }
@@ -63,6 +65,7 @@ export function PanelHeader({
   onAddGroupRole,
   onManageGroupRoles,
   onOpenGroupPlan,
+  onOpenGroupMemory,
   onSelectTaskState,
 }: PanelHeaderProps) {
   const isGroup = panel.kind === "group";
@@ -283,6 +286,16 @@ export function PanelHeader({
                       className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] text-[var(--ink)] transition hover:bg-[var(--paper-2)]"
                     >
                       <span>查看 Plan</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onOpenGroupMemory?.();
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] text-[var(--ink)] transition hover:bg-[var(--paper-2)]"
+                    >
+                      <span>查看记忆板</span>
                     </button>
                     <button
                       type="button"

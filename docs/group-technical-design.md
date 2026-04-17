@@ -377,16 +377,16 @@ flowchart TD
 
 ## TODO
 
-### 结构化路由 group_route（设计已完成，待实现）
+### ~~结构化路由 group_route~~（已完成）
 
-设计方案详见 [Structured Routing](#structured-routing) 章节。
+设计与实现均已完成，详见 [Structured Routing](#structured-routing) 章节。
 
 ### 补齐群管理 Tool 的后续扩展
 
 当前 `manage_group` 已经覆盖“创建/删除群组 + 管理成员/leader + 查群状态 + 发群消息”，后续仍可继续扩展：
 
 - 增加更细粒度的权限与确认策略，避免角色误改群结构
-- 后续如果接入结构化 `group_route`，需要继续保持“群管理 tool”和“群路由 tool”职责分离
+- `group_route` 已独立为专用路由 tool，需持续保持”群管理 tool”与”群路由 tool”职责分离，不要合并
 
 ### Group Plan 的后续扩展
 

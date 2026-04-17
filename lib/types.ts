@@ -297,6 +297,8 @@ export interface PanelView {
   taskState?: GroupTaskState;
   /** 群计划，仅 kind="group" 时有效 */
   groupPlan?: GroupPlan | null;
+  /** 各角色记忆板，仅 kind="group" 时有效，key 为 roleId */
+  groupMemory?: Record<string, GroupRoleMemory> | null;
   userRoleName: string;
   assistantRoleName: string;
   /** 当前活跃运行 ID */

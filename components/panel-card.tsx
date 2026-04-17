@@ -33,6 +33,7 @@ import { ConfirmDialog } from "./confirm-dialog";
 import type { ConfirmDialogConfig } from "./confirm-dialog";
 import { CreateGroupRoleDialog } from "./create-group-role-dialog";
 import type { CreateGroupRoleDialogConfig } from "./create-group-role-dialog";
+import { GroupMemoryDialog } from "./group-memory-dialog";
 import { GroupPlanDialog } from "./group-plan-dialog";
 import { ImageViewer } from "./image-viewer";
 import { ManageGroupRolesDialog } from "./manage-group-roles-dialog";
@@ -125,6 +126,7 @@ export function PanelCard({
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [createGroupRoleResetToken, setCreateGroupRoleResetToken] = useState(0);
   const [groupPlanDialogOpen, setGroupPlanDialogOpen] = useState(false);
+  const [groupMemoryDialogOpen, setGroupMemoryDialogOpen] = useState(false);
   const [panelMessagesReady, setPanelMessagesReady] = useState(
     panel.messagesLoaded && (panel.messageCount === 0 || panel.messages.length > 0),
   );
@@ -253,6 +255,7 @@ export function PanelCard({
       kind: panel.kind,
       taskState: panel.taskState,
       groupPlan: panel.groupPlan,
+      groupMemory: panel.groupMemory,
       userRoleName: panel.userRoleName,
       assistantRoleName: panel.assistantRoleName,
       createdAt: panel.createdAt,
@@ -265,6 +268,7 @@ export function PanelCard({
       panel.id,
       panel.kind,
       panel.groupPlan,
+      panel.groupMemory,
       panel.sessionKey,
       panel.taskState,
       panel.title,
@@ -635,6 +639,7 @@ export function PanelCard({
         onAddGroupRole={isGroupPanel ? () => setCreateGroupRoleDialog({ open: true, panelId: panel.id }) : undefined}
         onManageGroupRoles={isGroupPanel ? () => setManageGroupRolesDialog({ open: true, panelId: panel.id, roles: groupRoles }) : undefined}
         onOpenGroupPlan={isGroupPanel ? () => setGroupPlanDialogOpen(true) : undefined}
+        onOpenGroupMemory={isGroupPanel ? () => setGroupMemoryDialogOpen(true) : undefined}
         onSelectTaskState={isGroupPanel ? (selection) => { void patchPanel({ taskStateSelection: selection }); } : undefined}
       />
 
@@ -707,6 +712,12 @@ export function PanelCard({
             title={panel.title}
             plan={panel.groupPlan}
             onClose={() => setGroupPlanDialogOpen(false)}
+          />
+          <GroupMemoryDialog
+            open={groupMemoryDialogOpen}
+            title={panel.title}
+            memory={panel.groupMemory}
+            onClose={() => setGroupMemoryDialogOpen(false)}
           />
         </>
       ) : null}

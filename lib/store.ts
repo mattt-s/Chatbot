@@ -410,6 +410,7 @@ function panelToView(
     kind: panelKind,
     taskState: panelKind === "group" ? normalizeGroupTaskState(panel.taskState) : undefined,
     groupPlan: panelKind === "group" ? sanitizeGroupPlan(panel.groupPlan) : undefined,
+    groupMemory: panelKind === "group" ? (panel.groupMemory ?? null) : undefined,
     userRoleName: panel.userRoleName?.trim() || DEFAULT_USER_ROLE_NAME,
     assistantRoleName:
       panel.assistantRoleName?.trim() || DEFAULT_ASSISTANT_ROLE_NAME,
