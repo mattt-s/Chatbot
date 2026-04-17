@@ -502,6 +502,52 @@ async function handleClearGroupMemory(user: SessionUser, params: AppRpcParams) {
   return { ok: true, panelId: panel.id, roleId: role.id };
 }
 
+// ---------------------------------------------------------------------------
+// group_route: 结构化路由意图存储
+// tool execute 时通过 RPC push 路由意图，ingest state=final 时消费
+// ---------------------------------------------------------------------------
+
+type PendingRouteIntent = {
+  panelId: string;
+  targetTitles: string[];
+  taskState?: string;
+  declaredAt: number;
+};
+
+const pendingRouteIntents = new Map<string, PendingRouteIntent>();
+
+function handleGroupRouteDeclare(params: AppRpcParams) {
+  const runId = typeof params.runId === "string" ? params.runId.trim() : "";
+  if (!runId) throw new Error("group_route.declare: runId is required");
+
+  const panelId = typeof params.panelId === "string" ? params.panelId.trim() : "";
+  const targets = Array.isArray(params.targets)
+    ? (params.targets as unknown[]).filter((t) => typeof t === "string").map((t) => (t as string).trim()).filter(Boolean)
+    : [];
+  const taskState = typeof params.taskState === "string" && params.taskState.trim()
+    ? params.taskState.trim()
+    : undefined;
+
+  pendingRouteIntents.set(runId, {
+    panelId,
+    targetTitles: targets,
+    taskState,
+    declaredAt: Date.now(),
+  });
+
+  return { ok: true };
+}
+
+/**
+ * 消费并删除某个 runId 的路由意图。ingest state=final 时调用。
+ * 消费后自动从 Map 中移除，保证幂等。
+ */
+export function consumeRouteIntent(runId: string): PendingRouteIntent | null {
+  const intent = pendingRouteIntents.get(runId);
+  if (intent) pendingRouteIntents.delete(runId);
+  return intent ?? null;
+}
+
 /**
  * 分发 Plugin → App 管理类 RPC。
  */
@@ -532,6 +578,8 @@ export async function dispatchCustomChatAppRpc(
       return handleUpdateGroupMemory(user, params);
     case "group_memory.clear":
       return handleClearGroupMemory(user, params);
+    case "group_route.declare":
+      return handleGroupRouteDeclare(params);
     case "group.list":
       return handleListGroups(user);
     case "agents.list":

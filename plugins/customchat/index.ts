@@ -5,6 +5,7 @@ import { customChatPlugin } from "./channel.js";
 import { registerCustomChatGroupManagementTool } from "./group-management-tool.js";
 import { registerCustomChatGroupMemoryTool } from "./group-memory-tool.js";
 import { registerCustomChatGroupPlanTool } from "./group-plan-tool.js";
+import { registerCustomChatGroupRouteTool } from "./group-route-tool.js";
 import {
   CUSTOMCHAT_PLUGIN_DESCRIPTION,
   CUSTOMCHAT_PLUGIN_ID,
@@ -24,5 +25,6 @@ export default defineChannelPluginEntry({
     registerCustomChatGroupManagementTool(api);
     registerCustomChatGroupPlanTool(api);
     registerCustomChatGroupMemoryTool(api);
+    registerCustomChatGroupRouteTool(api);
   },
 });

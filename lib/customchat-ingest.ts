@@ -12,14 +12,7 @@ import { z } from "zod";
 
 import { publishCustomChatEvent } from "@/lib/customchat-events";
 import { shouldHideBridgeDeliveryNoiseText } from "@/lib/bridge-delivery";
-import {
-  messageMarksGroupTaskCompleted,
-  messageMarksGroupTaskInProgress,
-  messageMarksGroupTaskWaitingInput,
-  messageMarksGroupTaskBlocked,
-  messageMarksGroupTaskPendingReview,
-  stripGroupTaskMarkers,
-} from "@/lib/group-task";
+import { consumeRouteIntent } from "@/lib/customchat-app-rpc";
 import {
   lookupRoleByRunId,
   onRoleReplyErrorOrAborted,
@@ -27,7 +20,6 @@ import {
   onRoleReplyTerminalWithoutRouting,
 } from "@/lib/group-router";
 import { createLogger } from "@/lib/logger";
-import { extractInstructionText, parseTrailingMentions } from "@/lib/mention-parser";
 import {
   findMessageByRunId,
   findPanelRecordByCustomChatTarget,
@@ -286,11 +278,7 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
   let senderLabel: string | null = null;
   let mentionedGroupRoleIds: string[] | undefined;
   let displayText = text;
-  let leaderIssuedCompletion = false;
-  let leaderIssuedInProgress = false;
-  let leaderIssuedWaitingInput = false;
-  let leaderIssuedBlocked = false;
-  let leaderIssuedPendingReview = false;
+  let routeIntentTaskState: string | undefined;
   let shouldSuppressBridgeNoiseText = false;
   let senderAgentId: string | null = null;
 
@@ -299,33 +287,21 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
     const role = groupRoles.find((r) => r.id === groupRoleId);
     senderLabel = role?.title ?? null;
     senderAgentId = role?.agentId ?? null;
-    leaderIssuedCompletion =
-      role?.isLeader === true &&
-      parsed.state === "final" &&
-      messageMarksGroupTaskCompleted(text);
-    leaderIssuedInProgress =
-      role?.isLeader === true &&
-      parsed.state === "final" &&
-      messageMarksGroupTaskInProgress(text);
-    leaderIssuedWaitingInput =
-      role?.isLeader === true &&
-      parsed.state === "final" &&
-      messageMarksGroupTaskWaitingInput(text);
-    leaderIssuedBlocked =
-      role?.isLeader === true &&
-      parsed.state === "final" &&
-      messageMarksGroupTaskBlocked(text);
-    leaderIssuedPendingReview =
-      role?.isLeader === true &&
-      parsed.state === "final" &&
-      messageMarksGroupTaskPendingReview(text);
 
-    if (text) {
-      const mentions = parseTrailingMentions(text, groupRoles);
-      if (mentions.length > 0) {
-        mentionedGroupRoleIds = mentions.map((r) => r.id);
+    // 消费 group_route tool 声明的结构化路由意图
+    if (parsed.state === "final") {
+      const intent = consumeRouteIntent(runId);
+      if (intent) {
+        routeIntentTaskState = intent.taskState;
+        if (intent.targetTitles.length > 0) {
+          const resolvedIds = intent.targetTitles
+            .map((title) => groupRoles.find((r) => r.title === title && r.enabled)?.id)
+            .filter((id): id is string => Boolean(id));
+          if (resolvedIds.length > 0) {
+            mentionedGroupRoleIds = resolvedIds;
+          }
+        }
       }
-      displayText = stripGroupTaskMarkers(extractInstructionText(text, groupRoles));
     }
   }
 
@@ -408,21 +384,9 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
     }
   }
 
-  if (groupRoleId && parsed.state === "final") {
-    const nextTaskState = leaderIssuedCompletion
-      ? "completed"
-      : leaderIssuedInProgress
-        ? "in_progress"
-        : leaderIssuedWaitingInput
-          ? "waiting_input"
-          : leaderIssuedBlocked
-            ? "blocked"
-            : leaderIssuedPendingReview
-              ? "pending_review"
-              : null;
-    if (nextTaskState) {
-      await setGroupPanelTaskState(panel.id, nextTaskState, "leader").catch(() => null);
-    }
+  const VALID_TASK_STATES = new Set(["idle", "in_progress", "waiting_input", "blocked", "pending_review", "completed"]);
+  if (groupRoleId && parsed.state === "final" && routeIntentTaskState && VALID_TASK_STATES.has(routeIntentTaskState)) {
+    await setGroupPanelTaskState(panel.id, routeIntentTaskState as import("@/lib/types").GroupTaskState, "leader").catch(() => null);
   }
 
   const payload: ChatEventPayload = {

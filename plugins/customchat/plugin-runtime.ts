@@ -276,6 +276,17 @@ export function getCustomChatRuntimeStatus() {
   return getCustomChatRuntimeStatusSummary();
 }
 
+/**
+ * 通过 toolCallId 反查所属 runId。
+ * tool execute 签名只有 toolCallId，通过此函数从 trackedRuns 中定位对应的 runId。
+ */
+export function getRunIdByToolCallId(toolCallId: string): string | null {
+  for (const [runId, run] of trackedRuns) {
+    if (run.toolCallArgs.has(toolCallId)) return runId;
+  }
+  return null;
+}
+
 function readNumericSessionField(record: JsonRecord, key: string) {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
