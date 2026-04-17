@@ -238,7 +238,7 @@ flowchart TD
     D --> E[“app 写入 pendingRouteIntents Map\nkey=runId”]
     E --> F[“tool 返回 ok，agent 继续”]
 
-    G[“state=final 到达 ingest”] --> H[“consumeRouteIntent(runId)”]
+    G[“state=final 到达 ingest”] --> H[“消费 pendingRouteIntents by runId”]
     H --> I{“有 pending intent”}
     I -->|是| J[“targets 解析为角色 ID”]
     J --> K[“routeMessage 转发给目标角色”]
@@ -352,7 +352,7 @@ flowchart TD
     B --> C["定位目标角色"]
     C --> D{"角色是否空闲"}
     D -->|是| E["直接 dispatch"]
-    E --> F["记录 busy(runId)"]
+    E --> F["记录 busy runId"]
     D -->|否| G["进入等待队列"]
 
     H["角色回流终态 final/error/aborted"] --> I{"runId 是否仍是当前 active run"}
