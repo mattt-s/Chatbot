@@ -279,10 +279,25 @@ export function getCustomChatRuntimeStatus() {
 /**
  * 通过 toolCallId 反查所属 runId。
  * tool execute 签名只有 toolCallId，通过此函数从 trackedRuns 中定位对应的 runId。
+ * 注意：toolCallArgs 由 stream phase=start 事件填充，execute 可能早于该事件触发，
+ * 因此此函数可能返回 null（存在时序竞争）。推荐优先使用 getRunIdByPanelId。
  */
 export function getRunIdByToolCallId(toolCallId: string): string | null {
   for (const [runId, run] of trackedRuns) {
     if (run.toolCallArgs.has(toolCallId)) return runId;
+  }
+  return null;
+}
+
+/**
+ * 通过 panelId 反查所属 runId。
+ * trackedRun.target 包含 panelId（格式如 group:direct:{panelId}:role:{roleId}），
+ * 以此定位当前正在运行的 run，不依赖 toolCallArgs 的时序。
+ * 若同一 panel 同时有多个 run（理论上不应发生），返回第一个匹配的。
+ */
+export function getRunIdByPanelId(panelId: string): string | null {
+  for (const [runId, run] of trackedRuns) {
+    if (run.target.includes(panelId)) return runId;
   }
   return null;
 }

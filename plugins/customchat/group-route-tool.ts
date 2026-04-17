@@ -1,5 +1,5 @@
 import type { CustomChatToolApi, CustomChatToolResult } from "./api-types.js";
-import { sendPortalAppRpc, getRunIdByToolCallId } from "./plugin-runtime.js";
+import { sendPortalAppRpc, getRunIdByToolCallId, getRunIdByPanelId } from "./plugin-runtime.js";
 
 const GROUP_ROUTE_TOOL_SCHEMA = {
   type: "object",
@@ -46,11 +46,6 @@ export function registerCustomChatGroupRouteTool(api: CustomChatToolApi) {
       "Declare routing intent for the current reply in a CustomChat group: specify which roles should receive the next message, and optionally update the group task state (leaders only). Call this once per reply after composing your response. Pass an empty targets array if no further routing is needed.",
     parameters: GROUP_ROUTE_TOOL_SCHEMA,
     execute: async (toolCallId, rawParams) => {
-      const runId = getRunIdByToolCallId(toolCallId);
-      if (!runId) {
-        throw new Error("group_route: cannot resolve runId for toolCallId=" + toolCallId);
-      }
-
       const panelId =
         typeof rawParams.panelId === "string" ? rawParams.panelId.trim() : "";
       const targets = Array.isArray(rawParams.targets)
@@ -58,6 +53,14 @@ export function registerCustomChatGroupRouteTool(api: CustomChatToolApi) {
         : [];
       const taskState =
         typeof rawParams.taskState === "string" ? rawParams.taskState.trim() : undefined;
+
+      // 优先用 panelId 反查 runId，避免 toolCallArgs 时序竞争问题
+      // （toolCallArgs 由 stream phase=start 事件填充，execute 可能先于该事件触发）
+      const runId =
+        getRunIdByPanelId(panelId) ?? getRunIdByToolCallId(toolCallId);
+      if (!runId) {
+        throw new Error("group_route: cannot resolve runId for panelId=" + panelId);
+      }
 
       await sendPortalAppRpc("group_route.declare", {
         runId,
