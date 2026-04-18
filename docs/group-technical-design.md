@@ -56,11 +56,25 @@
 - 查询单个群的任务状态与详情
 - 查询可用 agent
 - 删除群组
-- 向群里发送一条“用户消息”
+- 向群里发送一条”用户消息”
 - 给群组添加角色
-- 更新角色信息
+- 更新角色信息（包括 `enabled` 开关）
 - 设置或取消 leader
 - 删除群组角色
+
+### 角色 enabled 字段
+
+每个群角色有一个 `enabled: boolean` 字段，控制该角色是否参与群对话：
+
+- `enabled=true`：角色正常参与，可被路由、可被 @mention
+- `enabled=false`：角色暂时退出群对话（软删除），不会被路由，也不会出现在 @mention 候选列表里
+
+**删除**操作的底层实现就是将 `enabled` 置为 `false`，而非真正从数据里移除，方便将来恢复。
+
+当前状态：
+- 后端完整支持，`update_group_role` RPC 接受 `enabled` 参数
+- `manage_group` tool 已在 SKILL.md 中文档化，agent 可通过 `action=”update_group_role”` + `enabled=false/true` 控制
+- 前端暂无可视化展示，`enabled=false` 的角色直接被过滤，用户无法感知也无法手动 toggle（待后续实现，见 TODO）
 
 它**不负责**下面这些运行时行为：
 

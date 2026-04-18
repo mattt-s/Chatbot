@@ -76,7 +76,7 @@ Set a leader by role title:
 }
 ```
 
-Update one role by real roleId:
+Update one role's title by real roleId:
 
 ```json
 {
@@ -84,6 +84,28 @@ Update one role by real roleId:
   "panelId": "05bb3e8a-2451-43fd-ac38-71d68ec684a2",
   "roleId": "360f80e3-c405-4f9d-a362-40f1d245f6bb",
   "title": "UI"
+}
+```
+
+Temporarily disable a role (remove from group routing without deleting):
+
+```json
+{
+  "action": "update_group_role",
+  "panelTitle": "博客开发群",
+  "roleTitle": "QA",
+  "enabled": false
+}
+```
+
+Re-enable a previously disabled role:
+
+```json
+{
+  "action": "update_group_role",
+  "panelTitle": "博客开发群",
+  "roleTitle": "QA",
+  "enabled": true
 }
 ```
 
