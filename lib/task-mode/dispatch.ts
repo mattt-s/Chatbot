@@ -7,6 +7,8 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 import {
   ensureCustomChatBridgeServer,
@@ -14,10 +16,82 @@ import {
 } from "@/lib/customchat-bridge-server";
 import { createLogger } from "@/lib/logger";
 import { toCustomChatGroupRoleTarget } from "@/lib/utils";
+import { listGroupRoles, getPanelTitleById } from "@/lib/store";
 import type { StoredGroupTask } from "@/lib/task-mode/types";
 import { recordTaskDispatch } from "@/lib/task-mode/store";
 
 const log = createLogger("task-mode:dispatch");
+
+// ─────────────────────────────────────────────────────────────
+// First-call tracking（进程内单例，重启后重置）
+// ─────────────────────────────────────────────────────────────
+
+declare global {
+  var __taskModeInitializedRoles: Set<string> | undefined;
+}
+
+function initializedRoles(): Set<string> {
+  if (!globalThis.__taskModeInitializedRoles) {
+    globalThis.__taskModeInitializedRoles = new Set();
+  }
+  return globalThis.__taskModeInitializedRoles;
+}
+
+export function isTaskModeFirstDispatch(panelId: string, roleId: string): boolean {
+  return !initializedRoles().has(`${panelId}:${roleId}`);
+}
+
+export function markTaskModeInitialized(panelId: string, roleId: string): void {
+  initializedRoles().add(`${panelId}:${roleId}`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 提示词加载
+// ─────────────────────────────────────────────────────────────
+
+const PROMPT_DIR = path.join(process.cwd(), "prompt");
+
+function loadPromptFile(filename: string): string {
+  try {
+    return fs.readFileSync(path.join(PROMPT_DIR, filename), "utf-8");
+  } catch {
+    log.error("loadPromptFile", new Error(`Prompt file not found: ${filename}`), {});
+    return "";
+  }
+}
+
+function applyTemplateVars(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
+}
+
+function buildTaskModePrompt(
+  isLeader: boolean,
+  vars: { roleName: string; groupName: string; membersList: string },
+): string {
+  const filename = isLeader ? "group-task-leader.md" : "group-task-member.md";
+  const template = loadPromptFile(filename);
+  if (!template) return "";
+  return applyTemplateVars(template, {
+    ROLE_NAME: vars.roleName,
+    GROUP_NAME: vars.groupName,
+    MEMBERS_LIST: vars.membersList,
+  });
+}
+
+/**
+ * 将角色列表格式化为提示词中的成员列表文本。
+ * 排除目标角色自身，突出显示 leader 身份。
+ */
+function formatMembersList(
+  allRoles: Array<{ id: string; title: string; isLeader?: boolean; enabled: boolean }>,
+  excludeRoleId: string,
+): string {
+  const others = allRoles.filter((r) => r.enabled && r.id !== excludeRoleId);
+  if (others.length === 0) return "（暂无其他成员）";
+  return others
+    .map((r) => (r.isLeader ? `- ${r.title}（组长）` : `- ${r.title}`))
+    .join("\n");
+}
 
 // ─────────────────────────────────────────────────────────────
 // 消息模板
@@ -27,7 +101,7 @@ export function buildAssignmentMessage(task: StoredGroupTask): string {
   return [
     `[任务分配] #${task.id.slice(0, 8)} ${task.title}`,
     `描述：${task.description}`,
-    `请调用 group_task(start_task, taskId="${task.id}") 认领，完成后调用 group_task(submit_task, taskId="${task.id}", note=...) 提交。`,
+    `请调用 group_task(action="start_task", taskId="${task.id}") 认领，完成后调用 group_task(action="submit_task", taskId="${task.id}", note=...) 提交。`,
   ].join("\n");
 }
 
@@ -35,7 +109,7 @@ export function buildRejectionMessage(task: StoredGroupTask): string {
   return [
     `[任务退回] #${task.id.slice(0, 8)} ${task.title}`,
     `退回原因：${task.reviewNote ?? "（未填写）"}`,
-    `请修改后重新调用 group_task(start_task, taskId="${task.id}") 认领并再次提交。`,
+    `请修改后重新调用 group_task(action="start_task", taskId="${task.id}") 认领并再次提交。`,
   ].join("\n");
 }
 
@@ -47,7 +121,7 @@ export function buildWatchdogRetryMessage(
     `[任务分配-重试 #${retryCount}] #${task.id.slice(0, 8)} ${task.title}`,
     `注意：上次 dispatch 未收到响应，请确认并认领任务。`,
     `描述：${task.description}`,
-    `请调用 group_task(start_task, taskId="${task.id}") 认领，完成后调用 group_task(submit_task, taskId="${task.id}", note=...) 提交。`,
+    `请调用 group_task(action="start_task", taskId="${task.id}") 认领，完成后调用 group_task(action="submit_task", taskId="${task.id}", note=...) 提交。`,
   ].join("\n");
 }
 
@@ -56,7 +130,7 @@ export function buildReviewRequestMessage(task: StoredGroupTask): string {
     `[待验收] #${task.id.slice(0, 8)} ${task.title}`,
     `执行者：${task.assigneeRoleTitle ?? "（未知）"}`,
     `提交说明：${task.submissionNote ?? "（未填写）"}`,
-    `请调用 group_task(approve_task, taskId="${task.id}") 或 group_task(reject_task, taskId="${task.id}", note=...) 处理。`,
+    `请调用 group_task(action="approve_task", taskId="${task.id}") 或 group_task(action="reject_task", taskId="${task.id}", note=...) 处理。`,
   ].join("\n");
 }
 
@@ -81,7 +155,7 @@ export function buildSubtaskApprovalRequestMessage(task: StoredGroupTask): strin
     `[子任务待审批] #${task.id.slice(0, 8)} ${task.title}`,
     `提出方：${task.creatorRoleTitle}${task.parentTaskId ? `  父任务：#${task.parentTaskId.slice(0, 8)}` : ""}`,
     `描述：${task.description}`,
-    `请调用 group_task(approve_subtask, taskId="${task.id}") 或 group_task(reject_subtask, taskId="${task.id}", note=...) 处理。`,
+    `请调用 group_task(action="approve_subtask", taskId="${task.id}") 或 group_task(action="reject_subtask", taskId="${task.id}", note=...) 处理。`,
   ].join("\n");
 }
 
@@ -96,6 +170,7 @@ export interface DispatchResult {
 
 /**
  * 向指定角色发送消息，并更新任务的 lastDispatchAt / activeRunId。
+ * 首次向某角色发送时自动注入任务模式系统提示词。
  */
 export async function dispatchTaskMessage(params: {
   panelId: string;
@@ -104,18 +179,45 @@ export async function dispatchTaskMessage(params: {
   text: string;
   /** 若提供，则将 activeRunId 记录到此 taskId */
   taskId?: string;
+  /** 是否为 leader 角色（影响注入的提示词） */
+  isLeader?: boolean;
+  /** 角色显示名，用于提示词模板 */
+  roleTitle?: string;
+  /** 群组面板信息，用于提示词模板 */
+  groupPanel?: { id: string; title: string };
 }): Promise<DispatchResult> {
   await ensureCustomChatBridgeServer();
 
   const messageId = crypto.randomUUID();
   const target = toCustomChatGroupRoleTarget(params.panelId, params.roleId);
 
+  // ── 首次 dispatch：注入任务模式提示词 ──
+  let textToSend = params.text;
+  if (isTaskModeFirstDispatch(params.panelId, params.roleId)) {
+    // 拉取角色列表和面板标题（仅首次触发，后续不再执行）
+    const [allRoles, panelTitle] = await Promise.all([
+      listGroupRoles(params.panelId),
+      getPanelTitleById(params.panelId),
+    ]);
+
+    const membersList = formatMembersList(allRoles, params.roleId);
+    const prompt = buildTaskModePrompt(params.isLeader ?? false, {
+      roleName: params.roleTitle ?? params.roleId,
+      groupName: panelTitle ?? params.groupPanel?.title ?? params.panelId,
+      membersList,
+    });
+    if (prompt) {
+      textToSend = `${prompt}\n\n${params.text}`;
+    }
+    markTaskModeInitialized(params.panelId, params.roleId);
+  }
+
   log.input("dispatchTaskMessage", {
     panelId: params.panelId,
     roleId: params.roleId,
     taskId: params.taskId ?? "none",
     target,
-    textLen: String(params.text.length),
+    textLen: String(textToSend.length),
   });
 
   const result = await sendInboundToPlugin({
@@ -123,13 +225,12 @@ export async function dispatchTaskMessage(params: {
     agentId: params.agentId,
     target,
     messageId,
-    text: params.text,
+    text: textToSend,
     attachments: [],
   });
 
   const runId = result.runId?.trim() || messageId;
 
-  // 更新任务的 dispatch 记录
   if (params.taskId) {
     await recordTaskDispatch(params.panelId, params.taskId, runId);
   }

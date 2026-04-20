@@ -1964,6 +1964,11 @@ export async function unsetGroupRoleLeader(
 /**
  * 读取某面板下的所有任务（只读）。
  */
+export async function getPanelTitleById(panelId: string): Promise<string | null> {
+  const data = await readData();
+  return data.panels.find((p) => p.id === panelId)?.title ?? null;
+}
+
 export async function readGroupTasks(panelId: string) {
   const data = await readData();
   return (data.groupTasks ?? []).filter((t) => t.panelId === panelId);

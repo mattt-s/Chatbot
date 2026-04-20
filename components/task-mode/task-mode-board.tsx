@@ -116,11 +116,18 @@ function SectionLabel({ label }: { label: string }) {
 
 function TaskDetail({
   task,
+  panelId,
   onClose,
+  onTaskUpdated,
 }: {
   task: GroupTaskView;
+  panelId: string;
   onClose: () => void;
+  onTaskUpdated: () => void;
 }) {
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   function fmtTime(iso: string) {
     return new Date(iso).toLocaleString("zh-CN", {
       month: "2-digit",
@@ -129,6 +136,36 @@ function TaskDetail({
       minute: "2-digit",
     });
   }
+
+  async function doAction(action: string) {
+    if (actionLoading) return;
+    setActionLoading(action);
+    setActionError(null);
+    try {
+      const res = await fetch(
+        `/api/panels/${panelId}/group-tasks/${task.id}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+      onTaskUpdated();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "操作失败");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  // Whether user intervention actions are available
+  const canRedispatch = task.status === "needs_intervention" || task.status === "assigned";
+  const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
+  const canCancel = !TERMINAL_STATUSES.has(task.status);
 
   return (
     <div className="flex h-full flex-col">
@@ -192,6 +229,40 @@ function TaskDetail({
                 {task.reviewNote}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* User intervention */}
+        {(canRedispatch || canCancel) && (
+          <div>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">
+              用户介入
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {canRedispatch && (
+                <button
+                  type="button"
+                  disabled={!!actionLoading}
+                  onClick={() => doAction("redispatch")}
+                  className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                >
+                  {actionLoading === "redispatch" ? "…" : "↺ 重新分配"}
+                </button>
+              )}
+              {canCancel && (
+                <button
+                  type="button"
+                  disabled={!!actionLoading}
+                  onClick={() => doAction("cancel")}
+                  className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                >
+                  {actionLoading === "cancel" ? "…" : "✕ 取消任务"}
+                </button>
+              )}
+            </div>
+            {actionError && (
+              <p className="mt-2 text-xs text-red-600">{actionError}</p>
+            )}
           </div>
         )}
 
@@ -280,6 +351,7 @@ export function TaskModeBoard({
   tasks,
   groupState,
   isLoading,
+  panelId,
   onRefresh,
 }: TaskModeBoardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -414,7 +486,12 @@ export function TaskModeBoard({
       {/* ── Task detail column ── */}
       {selectedTask && (
         <div className="min-w-0 flex-1 overflow-hidden">
-          <TaskDetail task={selectedTask} onClose={() => setSelectedId(null)} />
+          <TaskDetail
+            task={selectedTask}
+            panelId={panelId}
+            onClose={() => setSelectedId(null)}
+            onTaskUpdated={onRefresh}
+          />
         </div>
       )}
     </div>

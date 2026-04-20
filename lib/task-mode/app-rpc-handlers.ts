@@ -165,6 +165,8 @@ async function triggerDependentTasks(panelId: string, doneTaskId: string) {
       agentId: role.agentId,
       text: buildAssignmentMessage(candidate),
       taskId: candidate.id,
+      isLeader: role.isLeader === true,
+      roleTitle: role.title,
     });
   }
 }
@@ -194,6 +196,8 @@ async function flushPendingDispatch(panelId: string, assigneeRoleId: string) {
     agentId: role.agentId,
     text,
     taskId: nextTaskId,
+    isLeader: role.isLeader === true,
+    roleTitle: role.title,
   });
 }
 
@@ -265,6 +269,8 @@ async function handleCreateTask(panelId: string, params: RpcParams) {
       roleId: leader.id,
       agentId: leader.agentId,
       text: buildSubtaskApprovalRequestMessage(task),
+      isLeader: true,
+      roleTitle: leader.title,
     });
   } else if (status === "assigned") {
     // 串行化检查
@@ -278,6 +284,8 @@ async function handleCreateTask(panelId: string, params: RpcParams) {
         agentId: assigneeRole.agentId,
         text: buildAssignmentMessage(task),
         taskId: task.id,
+        isLeader: assigneeRole.isLeader === true,
+        roleTitle: assigneeRole.title,
       });
     }
   }
@@ -368,6 +376,8 @@ async function handleSubmitTask(panelId: string, params: RpcParams) {
     roleId: leader.id,
     agentId: leader.agentId,
     text: buildReviewRequestMessage(taskWithNote),
+    isLeader: true,
+    roleTitle: leader.title,
   });
 
   return { ok: true, task: taskToView(updated) };
@@ -449,6 +459,8 @@ async function handleRejectTask(panelId: string, params: RpcParams) {
           agentId: assigneeRole.agentId,
           text: buildRejectionMessage(taskWithNote),
           taskId,
+          isLeader: assigneeRole.isLeader === true,
+          roleTitle: assigneeRole.title,
         });
       }
     }
@@ -507,6 +519,8 @@ async function handleApproveSubtask(panelId: string, params: RpcParams) {
           agentId: assigneeRole.agentId,
           text: buildAssignmentMessage(updatedTask ?? task),
           taskId,
+          isLeader: assigneeRole.isLeader === true,
+          roleTitle: assigneeRole.title,
         });
       }
     }
@@ -550,6 +564,8 @@ async function handleRejectSubtask(panelId: string, params: RpcParams) {
           `驳回原因：${note || "（未填写）"}`,
           `请自行处理该依赖，或向 leader 反馈。`,
         ].join("\n"),
+        isLeader: creator.isLeader === true,
+        roleTitle: creator.title,
       });
     }
   }
@@ -610,6 +626,8 @@ async function handleBlockOn(panelId: string, params: RpcParams) {
     roleId: leader.id,
     agentId: leader.agentId,
     text: buildBlockedNotificationMessage(task, depTask.title, note),
+    isLeader: true,
+    roleTitle: leader.title,
   });
 
   return { ok: true, task: taskToView(updated) };
@@ -647,6 +665,35 @@ async function handleAddDependency(panelId: string, params: RpcParams) {
 
   const updated = await getGroupTask(panelId, taskId);
   return { ok: true, task: updated ? taskToView(updated) : null };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Handler: cancel_task
+// ─────────────────────────────────────────────────────────────
+
+async function handleCancelTask(panelId: string, params: RpcParams) {
+  const taskId = readStr(params, "taskId", true);
+  const note = readStr(params, "note");
+
+  const task = await getGroupTask(panelId, taskId);
+  if (!task) throw new Error(`任务 "${taskId}" 不存在。`);
+  if (TASK_TERMINAL_STATUSES.has(task.status)) {
+    throw new Error(`任务当前状态 "${task.status}" 已是终态，无法取消。`);
+  }
+
+  const updated = await updateGroupTaskStatus(panelId, taskId, "cancelled", {
+    type: "cancelled",
+    actorRoleId: "user",
+    actorRoleTitle: "用户介入",
+    note: note || "用户手动取消",
+  });
+
+  // 释放 assignee 的 pending 队列
+  if (task.assigneeRoleId) {
+    await flushPendingDispatch(panelId, task.assigneeRoleId);
+  }
+
+  return { ok: true, task: taskToView(updated) };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -711,6 +758,8 @@ export async function watchdogRedispatch(
     agentId: assigneeRole.agentId,
     text: buildWatchdogRetryMessage(task, newRetryCount),
     taskId,
+    isLeader: assigneeRole.isLeader === true,
+    roleTitle: assigneeRole.title,
   });
 
   log.debug("watchdogRedispatch.retried", {
@@ -756,6 +805,8 @@ export async function dispatchGroupTaskRpc(
       return handleListTasks(panelId);
     case "get_task":
       return handleGetTask(panelId, params);
+    case "cancel_task":
+      return handleCancelTask(panelId, params);
     default:
       throw new Error(`Unknown group_task action: ${action}`);
   }

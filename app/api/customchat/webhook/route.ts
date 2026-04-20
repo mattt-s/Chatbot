@@ -43,6 +43,13 @@ export async function POST(request: Request) {
   try {
     // 群组面板走群组路由，直接面板走 Provider 投递
     if (panel.kind === "group") {
+      // ── 任务模式：用户消息直接投递给 leader，不走 group_route ──
+      if (panel.groupMode === "task") {
+        const { submitGroupTaskMessage } = await import("@/lib/task-mode/group-task-message");
+        const result = await submitGroupTaskMessage({ user, panel, message, files, messageId });
+        return NextResponse.json({ ok: true, runId: null, status: "routed", userMessage: result.userMessage });
+      }
+
       const result = await submitGroupMessage({
         user,
         panel,

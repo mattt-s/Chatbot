@@ -1,6 +1,6 @@
 /**
  * @module task-mode/cycle-detect
- * 任务依赖图的循环依赖检测（DFS）。
+ * 任务依赖图的循环依赖检测（BFS + 父节点回溯）。
  * 仅在 add_dependency / block_on 时触发，create_task 不需要（新任务无入边）。
  */
 
@@ -24,17 +24,27 @@ export function detectCycle(
 ): string | null {
   const taskMap = new Map(tasks.map((t) => [t.id, t]));
 
-  // BFS/DFS 从 Y 出发，沿 dependsOnTaskIds 向上游走，看能否到达 X
+  // BFS from Y, track parent pointers to reconstruct path on hit
   const visited = new Set<string>();
-  const path: string[] = [newDependsOnTaskId];
-  const stack: string[] = [newDependsOnTaskId];
+  const parent = new Map<string, string>(); // child → parent in BFS tree
+  const queue: string[] = [newDependsOnTaskId];
+  visited.add(newDependsOnTaskId);
 
-  while (stack.length > 0) {
-    const current = stack.pop()!;
+  while (queue.length > 0) {
+    const current = queue.shift()!;
 
     if (current === taskId) {
-      // 找到了循环，构造路径描述
-      const cycleDesc = [...path, taskId]
+      // Reconstruct path from Y to X via parent pointers, then add X→Y
+      const path: string[] = [];
+      let node: string | undefined = current;
+      while (node !== undefined) {
+        path.unshift(node);
+        node = parent.get(node);
+      }
+      // path is now [Y, ..., X]; the cycle closes with X→Y
+      path.push(newDependsOnTaskId);
+
+      const cycleDesc = path
         .map((id) => {
           const t = taskMap.get(id);
           return t ? `"${t.title}"(${id.slice(0, 8)})` : id.slice(0, 8);
@@ -43,15 +53,14 @@ export function detectCycle(
       return `循环依赖：${cycleDesc}`;
     }
 
-    if (visited.has(current)) continue;
-    visited.add(current);
-
     const currentTask = taskMap.get(current);
     if (!currentTask) continue;
 
     for (const depId of currentTask.dependsOnTaskIds) {
       if (!visited.has(depId)) {
-        stack.push(depId);
+        visited.add(depId);
+        parent.set(depId, current);
+        queue.push(depId);
       }
     }
   }

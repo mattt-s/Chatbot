@@ -23,6 +23,7 @@ const GROUP_TASK_TOOL_SCHEMA = {
         "add_dependency",
         "list_tasks",
         "get_task",
+        "cancel_task",
       ],
       description: "要执行的任务操作。",
     },
