@@ -2,7 +2,18 @@
 
 ## Overview
 
-群组模式基于“每个群角色一个独立 session”的模型运行：
+群组目前支持两种协作模式，创建时选择，不可切换：
+
+| 模式 | 说明 | 文档 |
+|---|---|---|
+| `chat`（群聊模式） | 消息驱动，用户发消息 → leader / 角色自由路由对话 | 本文档 |
+| `task`（任务模式） | 工单驱动，leader 拆分子任务 → 工单流转执行验收 | [group-task-mode-design.md](./group-task-mode-design.md) |
+
+本文档描述**群聊模式**的运行时设计。任务模式的完整方案见 [group-task-mode-design.md](./group-task-mode-design.md)。
+
+---
+
+群组模式基于”每个群角色一个独立 session”的模型运行：
 
 - 群组 panel 负责承载消息与角色列表
 - 每个群角色收到消息时，都会投递到自己的 provider session
@@ -390,6 +401,12 @@ flowchart TD
 ```
 
 ## TODO
+
+### 任务模式（task mode）
+
+设计方案已完成，待实现。详见 [group-task-mode-design.md](./group-task-mode-design.md)。
+
+核心改动：`groupMode` 字段、`StoredGroupTask` 数据模型、`group_task` tool、任务看板前端。
 
 ### ~~结构化路由 group_route~~（已完成）
 
