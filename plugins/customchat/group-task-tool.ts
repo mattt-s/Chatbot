@@ -17,8 +17,6 @@ const GROUP_TASK_TOOL_SCHEMA = {
         "submit_task",
         "approve_task",
         "reject_task",
-        "approve_subtask",
-        "reject_subtask",
         "block_on",
         "add_dependency",
         "list_tasks",
@@ -63,15 +61,20 @@ const GROUP_TASK_TOOL_SCHEMA = {
       type: "string",
       description: "父任务 ID（成员提子任务时填写，可选）。",
     },
+    reviewerTitle: {
+      type: "string",
+      description:
+        "验收者角色名（create_task 可选）。不填时默认由组长验收。不能与 assigneeTitle 相同。",
+    },
     autoApprove: {
       type: "boolean",
       description:
-        "是否自动通过验收，仅 leader 可设为 true（默认 false）。设为 true 时 assignee 提交即视为通过，无需 leader 验收。",
+        "是否自动通过验收（默认 false）。设为 true 时 assignee 提交即视为通过，无需验收者审核。",
     },
     // ── submit_task / reject_task 参数 ──
     note: {
       type: "string",
-      description: "提交说明（submit_task）或驳回原因（reject_task / reject_subtask）。",
+      description: "提交说明（submit_task）或驳回原因（reject_task）。",
     },
     // ── block_on / add_dependency 参数 ──
     dependsOnTaskId: {
@@ -98,7 +101,7 @@ export function registerCustomChatGroupTaskTool(api: CustomChatToolApi) {
       "Use this tool to create, start, submit, approve, reject, or query tasks.",
       "Always pass callerRoleId or callerRoleTitle so the app can identify the calling role.",
       "Available actions: create_task, start_task, submit_task, approve_task, reject_task,",
-      "approve_subtask, reject_subtask, block_on, add_dependency, list_tasks, get_task.",
+      "block_on, add_dependency, list_tasks, get_task, cancel_task.",
     ].join(" "),
     parameters: GROUP_TASK_TOOL_SCHEMA,
     execute: async (_toolCallId, rawParams) => {

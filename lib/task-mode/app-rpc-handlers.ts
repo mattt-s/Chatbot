@@ -1,7 +1,7 @@
 /**
  * @module task-mode/app-rpc-handlers
  * group_task.* 的所有 RPC handler。
- * 状态机转换、依赖触发、串行化队列、循环检测、autoApprove 权限约束均在此处理。
+ * 状态机转换、依赖触发、串行化队列、循环检测、验收者校验均在此处理。
  * 完全独立于聊天模式的 RPC handlers。
  */
 import "server-only";
@@ -24,7 +24,6 @@ import {
   buildRejectionMessage,
   buildReviewRequestMessage,
   buildBlockedNotificationMessage,
-  buildSubtaskApprovalRequestMessage,
   buildWatchdogRetryMessage,
 } from "@/lib/task-mode/dispatch";
 import { detectCycle } from "@/lib/task-mode/cycle-detect";
@@ -57,9 +56,7 @@ function readBool(params: RpcParams, key: string, defaultValue = false): boolean
   return typeof params[key] === "boolean" ? (params[key] as boolean) : defaultValue;
 }
 
-/**
- * 通过 panelId 和 roleTitle 找到角色信息（id + agentId）。
- */
+/** 通过 panelId 和 roleTitle 找到角色信息。 */
 async function resolveRoleByTitle(panelId: string, roleTitle: string) {
   const roles = await listGroupRoles(panelId);
   const role = roles.find((r) => r.title === roleTitle && r.enabled);
@@ -67,9 +64,7 @@ async function resolveRoleByTitle(panelId: string, roleTitle: string) {
   return role;
 }
 
-/**
- * 找到 leader 角色。
- */
+/** 找到 leader 角色（用于 block_on 通知等）。 */
 async function resolveLeaderRole(panelId: string) {
   const roles = await listGroupRoles(panelId);
   const leader = roles.find((r) => r.isLeader && r.enabled);
@@ -77,9 +72,7 @@ async function resolveLeaderRole(panelId: string) {
   return leader;
 }
 
-/**
- * 找到调用方角色（通过 callerRoleId 或 callerRoleTitle）。
- */
+/** 找到调用方角色。 */
 async function resolveCallerRole(panelId: string, params: RpcParams) {
   const callerRoleId = readStr(params, "callerRoleId");
   const callerRoleTitle = readStr(params, "callerRoleTitle");
@@ -98,9 +91,7 @@ async function resolveCallerRole(panelId: string, params: RpcParams) {
   throw new Error("缺少调用方标识：callerRoleId 或 callerRoleTitle。");
 }
 
-/**
- * 检查前置任务是否全部完成（done），并返回第一个未完成的 taskId（若有）。
- */
+/** 检查前置任务是否全部完成。 */
 async function checkAllDependenciesDone(
   panelId: string,
   dependsOnTaskIds: string[],
@@ -117,9 +108,7 @@ async function checkAllDependenciesDone(
   return { allDone: true, firstPendingId: null };
 }
 
-/**
- * 任务 T 完成（done）后，触发所有依赖 T 的任务（created/blocked）。
- */
+/** 任务 T 完成后，触发所有依赖 T 的任务。 */
 async function triggerDependentTasks(panelId: string, doneTaskId: string) {
   const tasks = await readGroupTasks(panelId);
   const candidates = tasks.filter(
@@ -135,7 +124,6 @@ async function triggerDependentTasks(panelId: string, doneTaskId: string) {
     const assigneeRoleId = candidate.assigneeRoleId;
     if (!assigneeRoleId || !candidate.assigneeRoleTitle) continue;
 
-    // 更新为 assigned
     await updateGroupTaskStatus(panelId, candidate.id, "assigned", {
       type: "assigned",
       actorRoleId: "app",
@@ -143,18 +131,13 @@ async function triggerDependentTasks(panelId: string, doneTaskId: string) {
       note: "前置任务全部完成，自动触发",
     });
 
-    // 串行化：如果 assignee 当前有活跃任务，入队
     const busy = await hasActiveTask(panelId, assigneeRoleId);
     if (busy) {
       enqueuePendingDispatch(assigneeRoleId, candidate.id);
-      log.debug("triggerDependentTasks.enqueued", {
-        taskId: candidate.id,
-        assigneeRoleId,
-      });
+      log.debug("triggerDependentTasks.enqueued", { taskId: candidate.id, assigneeRoleId });
       continue;
     }
 
-    // 立即 dispatch
     const roles = await listGroupRoles(panelId);
     const role = roles.find((r) => r.id === assigneeRoleId);
     if (!role) continue;
@@ -171,9 +154,7 @@ async function triggerDependentTasks(panelId: string, doneTaskId: string) {
   }
 }
 
-/**
- * 当一个 assignee 的任务到达终态后，从队列取下一个任务 dispatch。
- */
+/** 当前任务终态后，从队列取下一个任务 dispatch。 */
 async function flushPendingDispatch(panelId: string, assigneeRoleId: string) {
   const nextTaskId = dequeuePendingDispatch(assigneeRoleId);
   if (!nextTaskId) return;
@@ -185,7 +166,6 @@ async function flushPendingDispatch(panelId: string, assigneeRoleId: string) {
   const role = roles.find((r) => r.id === assigneeRoleId);
   if (!role) return;
 
-  // task.status at this point is "assigned"; use reviewNote to detect it was previously rejected
   const text = task.reviewNote
     ? buildRejectionMessage(task)
     : buildAssignmentMessage(task);
@@ -210,7 +190,9 @@ async function handleCreateTask(panelId: string, params: RpcParams) {
   const title = readStr(params, "title", true);
   const description = readStr(params, "description", true);
   const assigneeTitle = readStr(params, "assigneeTitle", true);
+  const reviewerTitle = readStr(params, "reviewerTitle"); // 可选，不填时默认 leader
   const parentTaskId = readStr(params, "parentTaskId") || undefined;
+  const autoApprove = readBool(params, "autoApprove", false);
   const dependsOnTaskIds = Array.isArray(params.dependsOnTaskIds)
     ? (params.dependsOnTaskIds as unknown[])
         .filter((id): id is string => typeof id === "string")
@@ -218,28 +200,48 @@ async function handleCreateTask(panelId: string, params: RpcParams) {
         .filter(Boolean)
     : [];
 
-  const isLeader = caller.isLeader === true;
-  // autoApprove 只有 leader 可以设置为 true
-  const autoApprove = isLeader ? readBool(params, "autoApprove", false) : false;
-
   const assigneeRole = await resolveRoleByTitle(panelId, assigneeTitle);
+
+  // 解析验收者（autoApprove=true 时不需要）
+  let reviewerRoleId: string | undefined;
+  let reviewerRoleTitle: string | undefined;
+
+  if (!autoApprove) {
+    let reviewerRole;
+    if (reviewerTitle) {
+      reviewerRole = await resolveRoleByTitle(panelId, reviewerTitle);
+    } else {
+      // 默认使用 leader 作为验收者
+      const roles = await listGroupRoles(panelId);
+      reviewerRole = roles.find((r) => r.isLeader && r.enabled);
+      if (!reviewerRole) {
+        throw new Error(
+          "未指定 reviewerTitle 且群组没有 leader，请通过 reviewerTitle 明确指定验收者。",
+        );
+      }
+    }
+    // 执行者与验收者不能相同
+    if (reviewerRole.id === assigneeRole.id) {
+      throw new Error(
+        `执行者和验收者不能是同一角色（"${assigneeRole.title}"）。请通过 reviewerTitle 指定其他角色。`,
+      );
+    }
+    reviewerRoleId = reviewerRole.id;
+    reviewerRoleTitle = reviewerRole.title;
+  }
 
   // 校验前置任务存在
   if (dependsOnTaskIds.length > 0) {
     const tasks = await readGroupTasks(panelId);
     const taskMap = new Map(tasks.map((t) => [t.id, t]));
     for (const depId of dependsOnTaskIds) {
-      if (!taskMap.has(depId)) {
-        throw new Error(`前置任务 ID "${depId}" 不存在。`);
-      }
+      if (!taskMap.has(depId)) throw new Error(`前置任务 ID "${depId}" 不存在。`);
     }
   }
 
-  // 非 leader 创建 → pending_approval，leader 创建 → 根据前置判断
+  // 确定初始状态（无 pending_approval，所有任务直接进入正常流程）
   let status: import("@/lib/task-mode/types").GroupTaskStatus;
-  if (!isLeader) {
-    status = "pending_approval";
-  } else if (dependsOnTaskIds.length > 0) {
+  if (dependsOnTaskIds.length > 0) {
     const { allDone } = await checkAllDependenciesDone(panelId, dependsOnTaskIds);
     status = allDone ? "assigned" : "created";
   } else {
@@ -255,25 +257,14 @@ async function handleCreateTask(panelId: string, params: RpcParams) {
     creatorRoleTitle: caller.title,
     assigneeRoleId: assigneeRole.id,
     assigneeRoleTitle: assigneeRole.title,
+    reviewerRoleId,
+    reviewerRoleTitle,
     parentTaskId,
     dependsOnTaskIds,
     autoApprove,
   });
 
-  // 处理 dispatch
-  if (status === "pending_approval") {
-    // 通知 leader 审批
-    const leader = await resolveLeaderRole(panelId);
-    await dispatchTaskMessage({
-      panelId,
-      roleId: leader.id,
-      agentId: leader.agentId,
-      text: buildSubtaskApprovalRequestMessage(task),
-      isLeader: true,
-      roleTitle: leader.title,
-    });
-  } else if (status === "assigned") {
-    // 串行化检查
+  if (status === "assigned") {
     const busy = await hasActiveTask(panelId, assigneeRole.id);
     if (busy) {
       enqueuePendingDispatch(assigneeRole.id, task.id);
@@ -338,30 +329,27 @@ async function handleSubmitTask(panelId: string, params: RpcParams) {
     throw new Error(`任务当前状态 "${task.status}" 不允许 submit_task。`);
   }
 
-  // 更新提交说明
   await updateGroupTaskField(panelId, taskId, "submissionNote", note || undefined);
 
   if (task.autoApprove) {
-    // 直接 done
     const updated = await updateGroupTaskStatus(panelId, taskId, "done", {
       type: "approved",
       actorRoleId: "app",
       actorRoleTitle: "系统（autoApprove）",
       note: "autoApprove=true，提交即通过",
     });
-
-    // 触发下游依赖
     await triggerDependentTasks(panelId, taskId);
-
-    // 释放队列
     if (task.assigneeRoleId) {
       await flushPendingDispatch(panelId, task.assigneeRoleId);
     }
-
     return { ok: true, task: taskToView(updated), autoApproved: true };
   }
 
-  // 需要 leader 验收
+  // 需要验收者审核
+  if (!task.reviewerRoleId) {
+    throw new Error("任务没有指定验收者（reviewerRoleId），无法提交审核。");
+  }
+
   const updated = await updateGroupTaskStatus(panelId, taskId, "reviewing", {
     type: "submitted",
     actorRoleId: caller.id,
@@ -369,15 +357,18 @@ async function handleSubmitTask(panelId: string, params: RpcParams) {
     note,
   });
 
-  const leader = await resolveLeaderRole(panelId);
+  const roles = await listGroupRoles(panelId);
+  const reviewer = roles.find((r) => r.id === task.reviewerRoleId);
+  if (!reviewer) throw new Error(`验收者角色 "${task.reviewerRoleId}" 不存在。`);
+
   const taskWithNote = { ...task, submissionNote: note || undefined };
   await dispatchTaskMessage({
     panelId,
-    roleId: leader.id,
-    agentId: leader.agentId,
+    roleId: reviewer.id,
+    agentId: reviewer.agentId,
     text: buildReviewRequestMessage(taskWithNote),
-    isLeader: true,
-    roleTitle: leader.title,
+    isLeader: reviewer.isLeader === true,
+    roleTitle: reviewer.title,
   });
 
   return { ok: true, task: taskToView(updated) };
@@ -391,12 +382,20 @@ async function handleApproveTask(panelId: string, params: RpcParams) {
   const taskId = readStr(params, "taskId", true);
   const caller = await resolveCallerRole(panelId, params);
 
-  if (!caller.isLeader) throw new Error("只有 leader 才能审批任务。");
-
   const task = await getGroupTask(panelId, taskId);
   if (!task) throw new Error(`任务 "${taskId}" 不存在。`);
   if (task.status !== "reviewing") {
     throw new Error(`任务当前状态 "${task.status}" 不允许 approve_task。`);
+  }
+
+  // 只有指定的验收者才能审批；执行者不能审批自己的任务
+  if (caller.id === task.assigneeRoleId) {
+    throw new Error("执行者不能验收自己的任务。");
+  }
+  if (task.reviewerRoleId && caller.id !== task.reviewerRoleId) {
+    throw new Error(
+      `只有指定的验收者（${task.reviewerRoleTitle ?? task.reviewerRoleId}）才能审批此任务。`,
+    );
   }
 
   const updated = await updateGroupTaskStatus(panelId, taskId, "done", {
@@ -405,10 +404,7 @@ async function handleApproveTask(panelId: string, params: RpcParams) {
     actorRoleTitle: caller.title,
   });
 
-  // 触发下游依赖
   await triggerDependentTasks(panelId, taskId);
-
-  // 释放 assignee 队列
   if (task.assigneeRoleId) {
     await flushPendingDispatch(panelId, task.assigneeRoleId);
   }
@@ -425,12 +421,20 @@ async function handleRejectTask(panelId: string, params: RpcParams) {
   const note = readStr(params, "note");
   const caller = await resolveCallerRole(panelId, params);
 
-  if (!caller.isLeader) throw new Error("只有 leader 才能驳回任务。");
-
   const task = await getGroupTask(panelId, taskId);
   if (!task) throw new Error(`任务 "${taskId}" 不存在。`);
   if (task.status !== "reviewing") {
     throw new Error(`任务当前状态 "${task.status}" 不允许 reject_task。`);
+  }
+
+  // 只有指定的验收者才能驳回；执行者不能驳回自己的任务
+  if (caller.id === task.assigneeRoleId) {
+    throw new Error("执行者不能驳回自己的任务。");
+  }
+  if (task.reviewerRoleId && caller.id !== task.reviewerRoleId) {
+    throw new Error(
+      `只有指定的验收者（${task.reviewerRoleTitle ?? task.reviewerRoleId}）才能驳回此任务。`,
+    );
   }
 
   await updateGroupTaskField(panelId, taskId, "reviewNote", note || undefined);
@@ -441,14 +445,11 @@ async function handleRejectTask(panelId: string, params: RpcParams) {
     note,
   });
 
-  // rejected 不释放队列，将退回任务放回 assignee 队首
   if (task.assigneeRoleId) {
     const busy = await hasActiveTask(panelId, task.assigneeRoleId);
     if (busy) {
-      // assignee 正在执行其他任务，把退回任务排在队首，等当前任务完成后 dispatch
       requeueRejectedTask(task.assigneeRoleId, taskId);
     } else {
-      // assignee 空闲，直接 dispatch 退回消息
       const roles = await listGroupRoles(panelId);
       const assigneeRole = roles.find((r) => r.id === task.assigneeRoleId);
       if (assigneeRole) {
@@ -470,110 +471,6 @@ async function handleRejectTask(panelId: string, params: RpcParams) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Handler: approve_subtask / reject_subtask
-// ─────────────────────────────────────────────────────────────
-
-async function handleApproveSubtask(panelId: string, params: RpcParams) {
-  const taskId = readStr(params, "taskId", true);
-  const caller = await resolveCallerRole(panelId, params);
-  const autoApproveOverride = readBool(params, "autoApprove", false);
-
-  if (!caller.isLeader) throw new Error("只有 leader 才能审批子任务。");
-
-  const task = await getGroupTask(panelId, taskId);
-  if (!task) throw new Error(`任务 "${taskId}" 不存在。`);
-  if (task.status !== "pending_approval") {
-    throw new Error(`任务当前状态 "${task.status}" 不允许 approve_subtask。`);
-  }
-
-  // leader 审批时可以设置 autoApprove
-  if (autoApproveOverride) {
-    await updateGroupTaskField(panelId, taskId, "autoApprove", true);
-  }
-
-  // 检查前置依赖
-  const { allDone } = await checkAllDependenciesDone(
-    panelId,
-    task.dependsOnTaskIds,
-  );
-  const newStatus = allDone ? "assigned" : "created";
-
-  await updateGroupTaskStatus(panelId, taskId, newStatus, {
-    type: "subtask_approved",
-    actorRoleId: caller.id,
-    actorRoleTitle: caller.title,
-  });
-
-  if (newStatus === "assigned" && task.assigneeRoleId) {
-    const busy = await hasActiveTask(panelId, task.assigneeRoleId);
-    if (busy) {
-      enqueuePendingDispatch(task.assigneeRoleId, taskId);
-    } else {
-      const roles = await listGroupRoles(panelId);
-      const assigneeRole = roles.find((r) => r.id === task.assigneeRoleId);
-      if (assigneeRole) {
-        const updatedTask = await getGroupTask(panelId, taskId);
-        await dispatchTaskMessage({
-          panelId,
-          roleId: assigneeRole.id,
-          agentId: assigneeRole.agentId,
-          text: buildAssignmentMessage(updatedTask ?? task),
-          taskId,
-          isLeader: assigneeRole.isLeader === true,
-          roleTitle: assigneeRole.title,
-        });
-      }
-    }
-  }
-
-  const updated = await getGroupTask(panelId, taskId);
-  return { ok: true, task: updated ? taskToView(updated) : null };
-}
-
-async function handleRejectSubtask(panelId: string, params: RpcParams) {
-  const taskId = readStr(params, "taskId", true);
-  const note = readStr(params, "note");
-  const caller = await resolveCallerRole(panelId, params);
-
-  if (!caller.isLeader) throw new Error("只有 leader 才能驳回子任务。");
-
-  const task = await getGroupTask(panelId, taskId);
-  if (!task) throw new Error(`任务 "${taskId}" 不存在。`);
-  if (task.status !== "pending_approval") {
-    throw new Error(`任务当前状态 "${task.status}" 不允许 reject_subtask。`);
-  }
-
-  const updated = await updateGroupTaskStatus(panelId, taskId, "cancelled", {
-    type: "subtask_rejected",
-    actorRoleId: caller.id,
-    actorRoleTitle: caller.title,
-    note: note || "leader 驳回子任务申请",
-  });
-
-  // 通知提出方
-  if (task.creatorRoleId) {
-    const roles = await listGroupRoles(panelId);
-    const creator = roles.find((r) => r.id === task.creatorRoleId);
-    if (creator) {
-      await dispatchTaskMessage({
-        panelId,
-        roleId: creator.id,
-        agentId: creator.agentId,
-        text: [
-          `[子任务已驳回] #${task.id.slice(0, 8)} ${task.title}`,
-          `驳回原因：${note || "（未填写）"}`,
-          `请自行处理该依赖，或向 leader 反馈。`,
-        ].join("\n"),
-        isLeader: creator.isLeader === true,
-        roleTitle: creator.title,
-      });
-    }
-  }
-
-  return { ok: true, task: taskToView(updated) };
-}
-
-// ─────────────────────────────────────────────────────────────
 // Handler: block_on
 // ─────────────────────────────────────────────────────────────
 
@@ -585,32 +482,22 @@ async function handleBlockOn(panelId: string, params: RpcParams) {
 
   const task = await getGroupTask(panelId, taskId);
   if (!task) throw new Error(`任务 "${taskId}" 不存在。`);
-  if (task.assigneeRoleId !== caller.id) {
-    throw new Error("只有 assignee 才能声明阻塞。");
-  }
+  if (task.assigneeRoleId !== caller.id) throw new Error("只有 assignee 才能声明阻塞。");
   if (task.status !== "in_progress") {
     throw new Error(`任务当前状态 "${task.status}" 不允许 block_on。`);
   }
 
-  // 检查前置任务存在
   const depTask = await getGroupTask(panelId, dependsOnTaskId);
   if (!depTask) throw new Error(`前置任务 "${dependsOnTaskId}" 不存在。`);
 
-  // 如果前置任务已经 done，不需要阻塞
   if (depTask.status === "done") {
-    return {
-      ok: true,
-      message: "前置任务已完成，无需阻塞，请直接继续执行。",
-      task: taskToView(task),
-    };
+    return { ok: true, message: "前置任务已完成，无需阻塞，请直接继续执行。", task: taskToView(task) };
   }
 
-  // 循环依赖检测
   const tasks = await readGroupTasks(panelId);
   const cycleError = detectCycle(tasks, taskId, dependsOnTaskId);
   if (cycleError) throw new Error(cycleError);
 
-  // 追加依赖并切换状态
   await addTaskDependency(panelId, taskId, dependsOnTaskId);
   const updated = await updateGroupTaskStatus(panelId, taskId, "blocked", {
     type: "blocked",
@@ -619,16 +506,19 @@ async function handleBlockOn(panelId: string, params: RpcParams) {
     note,
   });
 
-  // 通知 leader
-  const leader = await resolveLeaderRole(panelId);
-  await dispatchTaskMessage({
-    panelId,
-    roleId: leader.id,
-    agentId: leader.agentId,
-    text: buildBlockedNotificationMessage(task, depTask.title, note),
-    isLeader: true,
-    roleTitle: leader.title,
-  });
+  // 通知 leader（如果存在）
+  const roles = await listGroupRoles(panelId);
+  const leader = roles.find((r) => r.isLeader && r.enabled);
+  if (leader) {
+    await dispatchTaskMessage({
+      panelId,
+      roleId: leader.id,
+      agentId: leader.agentId,
+      text: buildBlockedNotificationMessage(task, depTask.title, note),
+      isLeader: true,
+      roleTitle: leader.title,
+    });
+  }
 
   return { ok: true, task: taskToView(updated) };
 }
@@ -650,7 +540,6 @@ async function handleAddDependency(panelId: string, params: RpcParams) {
   const depTask = await getGroupTask(panelId, dependsOnTaskId);
   if (!depTask) throw new Error(`前置任务 "${dependsOnTaskId}" 不存在。`);
 
-  // 循环依赖检测
   const tasks = await readGroupTasks(panelId);
   const cycleError = detectCycle(tasks, taskId, dependsOnTaskId);
   if (cycleError) throw new Error(cycleError);
@@ -665,6 +554,22 @@ async function handleAddDependency(panelId: string, params: RpcParams) {
 
   const updated = await getGroupTask(panelId, taskId);
   return { ok: true, task: updated ? taskToView(updated) : null };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Handler: list_tasks / get_task
+// ─────────────────────────────────────────────────────────────
+
+async function handleListTasks(panelId: string) {
+  const tasks = await readGroupTasks(panelId);
+  return { ok: true, tasks: tasks.map(taskToView) };
+}
+
+async function handleGetTask(panelId: string, params: RpcParams) {
+  const taskId = readStr(params, "taskId", true);
+  const task = await getGroupTask(panelId, taskId);
+  if (!task) throw new Error(`任务 "${taskId}" 不存在。`);
+  return { ok: true, task: taskToView(task) };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -688,7 +593,6 @@ async function handleCancelTask(panelId: string, params: RpcParams) {
     note: note || "用户手动取消",
   });
 
-  // 释放 assignee 的 pending 队列
   if (task.assigneeRoleId) {
     await flushPendingDispatch(panelId, task.assigneeRoleId);
   }
@@ -697,23 +601,7 @@ async function handleCancelTask(panelId: string, params: RpcParams) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Handler: list_tasks / get_task
-// ─────────────────────────────────────────────────────────────
-
-async function handleListTasks(panelId: string) {
-  const tasks = await readGroupTasks(panelId);
-  return { ok: true, tasks: tasks.map(taskToView) };
-}
-
-async function handleGetTask(panelId: string, params: RpcParams) {
-  const taskId = readStr(params, "taskId", true);
-  const task = await getGroupTask(panelId, taskId);
-  if (!task) throw new Error(`任务 "${taskId}" 不存在。`);
-  return { ok: true, task: taskToView(task) };
-}
-
-// ─────────────────────────────────────────────────────────────
-// Watchdog：重试 dispatch（由 watchdog.ts 调用）
+// Watchdog（由 watchdog.ts 调用）
 // ─────────────────────────────────────────────────────────────
 
 export async function watchdogRedispatch(
@@ -721,9 +609,7 @@ export async function watchdogRedispatch(
   taskId: string,
 ): Promise<{ retried: boolean; intervention: boolean }> {
   const task = await getGroupTask(panelId, taskId);
-  if (!task || task.status !== "assigned") {
-    return { retried: false, intervention: false };
-  }
+  if (!task || task.status !== "assigned") return { retried: false, intervention: false };
 
   const MAX_RETRY = 2;
   const newRetryCount = task.watchdogRetryCount + 1;
@@ -746,7 +632,6 @@ export async function watchdogRedispatch(
     return { retried: false, intervention: true };
   }
 
-  // 重新 dispatch
   if (!task.assigneeRoleId) return { retried: false, intervention: false };
   const roles = await listGroupRoles(panelId);
   const assigneeRole = roles.find((r) => r.id === task.assigneeRoleId);
@@ -762,12 +647,7 @@ export async function watchdogRedispatch(
     roleTitle: assigneeRole.title,
   });
 
-  log.debug("watchdogRedispatch.retried", {
-    panelId,
-    taskId,
-    retryCount: String(newRetryCount),
-  });
-
+  log.debug("watchdogRedispatch.retried", { panelId, taskId, retryCount: String(newRetryCount) });
   return { retried: true, intervention: false };
 }
 
@@ -783,30 +663,16 @@ export async function dispatchGroupTaskRpc(
   log.debug("dispatchGroupTaskRpc", { panelId, action });
 
   switch (action) {
-    case "create_task":
-      return handleCreateTask(panelId, params);
-    case "start_task":
-      return handleStartTask(panelId, params);
-    case "submit_task":
-      return handleSubmitTask(panelId, params);
-    case "approve_task":
-      return handleApproveTask(panelId, params);
-    case "reject_task":
-      return handleRejectTask(panelId, params);
-    case "approve_subtask":
-      return handleApproveSubtask(panelId, params);
-    case "reject_subtask":
-      return handleRejectSubtask(panelId, params);
-    case "block_on":
-      return handleBlockOn(panelId, params);
-    case "add_dependency":
-      return handleAddDependency(panelId, params);
-    case "list_tasks":
-      return handleListTasks(panelId);
-    case "get_task":
-      return handleGetTask(panelId, params);
-    case "cancel_task":
-      return handleCancelTask(panelId, params);
+    case "create_task":      return handleCreateTask(panelId, params);
+    case "start_task":       return handleStartTask(panelId, params);
+    case "submit_task":      return handleSubmitTask(panelId, params);
+    case "approve_task":     return handleApproveTask(panelId, params);
+    case "reject_task":      return handleRejectTask(panelId, params);
+    case "block_on":         return handleBlockOn(panelId, params);
+    case "add_dependency":   return handleAddDependency(panelId, params);
+    case "list_tasks":       return handleListTasks(panelId);
+    case "get_task":         return handleGetTask(panelId, params);
+    case "cancel_task":      return handleCancelTask(panelId, params);
     default:
       throw new Error(`Unknown group_task action: ${action}`);
   }

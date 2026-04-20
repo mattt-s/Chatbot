@@ -128,6 +128,8 @@ export async function createGroupTask(input: {
   creatorRoleTitle: string;
   assigneeRoleId?: string;
   assigneeRoleTitle?: string;
+  reviewerRoleId?: string;
+  reviewerRoleTitle?: string;
   parentTaskId?: string;
   dependsOnTaskIds?: string[];
   autoApprove?: boolean;
@@ -143,6 +145,8 @@ export async function createGroupTask(input: {
     creatorRoleTitle: input.creatorRoleTitle,
     assigneeRoleId: input.assigneeRoleId,
     assigneeRoleTitle: input.assigneeRoleTitle,
+    reviewerRoleId: input.reviewerRoleId,
+    reviewerRoleTitle: input.reviewerRoleTitle,
     parentTaskId: input.parentTaskId,
     dependsOnTaskIds: input.dependsOnTaskIds ?? [],
     autoApprove: input.autoApprove ?? false,

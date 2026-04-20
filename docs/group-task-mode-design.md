@@ -66,23 +66,22 @@
 ## 任务状态机
 
 ```
-pending_approval → assigned → in_progress → submitted → reviewing → done
-                ↗                        ↘ blocked ↗           ↘ rejected → in_progress（重新执行）
-         created                                                           ↘ needs_intervention → cancelled（用户放弃）
-                                                                                                ↘ assigned（用户重新唤起/改派）
+created → assigned → in_progress → submitted → reviewing → done
+                               ↘ blocked ↗           ↘ rejected → in_progress（重新执行）
+                                                                 ↘ needs_intervention → cancelled（用户放弃）
+                                                                                      ↘ assigned（用户重新唤起/改派）
 ```
 
 | 状态 | 含义 | 触发方 | 是否终态 |
 |---|---|---|---|
-| `pending_approval` | 成员提出的子任务，等待 leader 审批 | 成员调用 `group_task(create_task)`（非 leader） | 否 |
-| `created` | 任务已创建，等待前置任务完成 | leader 或成员（成员走 pending_approval 先） | 否 |
+| `created` | 任务已创建，等待前置任务完成 | leader 或成员 | 否 |
 | `assigned` | 已分配给执行者，等待认领 | app 自动（创建时无前置 / 所有前置完成 / blocked 恢复 / reject 后退回） | 否 |
 | `in_progress` | 执行者认领，正在执行 | assignee 调用 `group_task(start_task)` | 否 |
 | `blocked` | 执行中发现阻塞，等待新追加的前置任务完成 | assignee 调用 `group_task(block_on)` | 否 |
 | `submitted` | 执行者提交，等待验收 | assignee 调用 `group_task(submit_task)` | 否 |
-| `reviewing` | leader 审核中 | app 自动（submit 后通知 leader） | 否 |
-| `done` | 验收通过 | leader 调用 `group_task(approve_task)` 或 autoApprove 自动通过 | **是** |
-| `rejected` | 验收不通过，**退回执行者重做**（非终态，任务仍要继续） | leader 调用 `group_task(reject_task)` | 否 |
+| `reviewing` | 验收者审核中 | app 自动（submit 后通知 reviewer） | 否 |
+| `done` | 验收通过 | reviewer 调用 `group_task(approve_task)` 或 autoApprove 自动通过 | **是** |
+| `rejected` | 验收不通过，**退回执行者重做**（非终态，任务仍要继续） | reviewer 调用 `group_task(reject_task)` | 否 |
 | `needs_intervention` | watchdog 连续重试失败，需要用户介入 | app 自动（watchdog 达到重试上限） | **准终态**（可恢复） |
 | `cancelled` | 用户主动放弃任务，永久终止 | 用户在前端操作（仅限 `needs_intervention` 状态） | **是** |
 
@@ -108,7 +107,7 @@ pending_approval → assigned → in_progress → submitted → reviewing → do
 6. assignee 执行完毕，调用 submit_task(taskId, note)
    ├── autoApprove=true → status=done，写 approved 事件，检查触发后续依赖任务
    └── autoApprove=false → status=reviewing，dispatch 验收请求给 leader
-7. leader 收到验收请求
+7. reviewer 收到验收请求
    ├── 通过 → approve_task(taskId) → status=done，触发后续依赖任务
    └── 不通过 → reject_task(taskId, note) → status=rejected
                 → 退回消息走 assignee 的 pending dispatch 队列（详见下文"同一 assignee 的任务串行化"），不抢占当前任务
@@ -140,14 +139,13 @@ pending_approval → assigned → in_progress → submitted → reviewing → do
    └── 否 → 继续等待其他前置任务
 ```
 
-### 成员提子任务（需 leader 审批）
+### 成员提子任务
 
 ```
 1. assignee 执行任务时发现依赖其他角色
-2. assignee 调用 create_task(assigneeTitle=otherRole, parentTaskId=currentTask)
-3. app 检测到调用方非 leader → status=pending_approval，dispatch 审批请求给 leader
-4. leader 调用 approve_subtask(taskId) → status 转为正式 assigned 流程
-   或 reject_subtask(taskId, note) → 任务废弃，通知 assignee 自行处理
+2. assignee 调用 create_task(assigneeTitle=otherRole, parentTaskId=currentTask, reviewerTitle?=...)
+3. app 直接将任务置为 assigned，dispatch 分配消息给指定 assignee
+   （无需 leader 预审批，任务质量由 reviewer 在验收阶段把关）
 ```
 
 ---
@@ -158,13 +156,12 @@ pending_approval → assigned → in_progress → submitted → reviewing → do
 
 ```typescript
 type GroupTaskStatus =
-  | "pending_approval"  // 成员提出的子任务，等 leader 审批
   | "created"           // 已创建，等待前置任务完成
   | "assigned"          // 已分配，等待认领
   | "in_progress"       // 执行中
   | "blocked"           // 执行中发现阻塞，等待新增的前置任务完成后自动恢复
   | "submitted"         // 已提交，等待验收
-  | "reviewing"         // leader 审核中
+  | "reviewing"         // 验收者审核中
   | "done"              // 已完成（终态）
   | "rejected"          // 退回，自动 dispatch 给 assignee 重新执行（非终态）
   | "needs_intervention"// watchdog 达到重试上限，需用户介入（准终态）
@@ -181,6 +178,12 @@ interface StoredGroupTask {
   creatorRoleTitle: string;
   assigneeRoleId?: string;
   assigneeRoleTitle?: string;
+  /**
+   * 验收者。autoApprove=false 时必填（默认为 leader）。
+   * 不能与 assigneeRoleId 相同（代码强制）。
+   */
+  reviewerRoleId?: string;
+  reviewerRoleTitle?: string;
   /** 父任务 ID（成员提子任务时填写） */
   parentTaskId?: string;
   /**
@@ -189,7 +192,7 @@ interface StoredGroupTask {
    * 循环依赖检测：add_dependency / block_on 时 DFS 检测，create_task 时新任务无入边不会形成环。
    */
   dependsOnTaskIds: string[];
-  /** true = 提交即通过，无需 leader 验收。仅 leader 创建任务时可设置，成员提子任务强制为 false */
+  /** true = 提交即通过，无需验收者审核。默认 false */
   autoApprove: boolean;
   submissionNote?: string;
   reviewNote?: string;
@@ -262,17 +265,16 @@ groupMode?: "chat" | "task";  // 默认 "chat"，创建后不可修改
 
 | action | 调用方 | 说明 |
 |---|---|---|
-| `create_task` | leader 或成员 | leader 调用直接进入 assigned；成员调用进入 pending_approval 等 leader 审批 |
+| `create_task` | leader 或成员 | 直接进入 assigned 流程，无需预审批；可通过 `reviewerTitle` 指定验收者（默认 leader） |
 | `start_task` | assignee | `assigned → in_progress` |
 | `submit_task` | assignee | `in_progress → reviewing`（或直接 `done` 若 autoApprove） |
-| `approve_task` | leader | `reviewing → done`，触发依赖此任务的后续任务 |
-| `reject_task` | leader | `reviewing → rejected`，重新 dispatch 给 assignee |
-| `approve_subtask` | leader | `pending_approval → assigned`，正式进入执行流程 |
-| `reject_subtask` | leader | `pending_approval → rejected`，通知提出方 |
+| `approve_task` | reviewer | `reviewing → done`，触发依赖此任务的后续任务 |
+| `reject_task` | reviewer | `reviewing → rejected`，重新 dispatch 给 assignee |
 | `block_on` | assignee | `in_progress → blocked`，声明阻塞并追加前置依赖，前置完成后自动恢复 `assigned` |
 | `add_dependency` | leader 或 assignee | 对未完成任务追加前置依赖，同时做循环检测 |
 | `list_tasks` | 任意角色 | 只读，返回当前群**全量**任务列表（含所有状态），对所有成员开放 |
 | `get_task` | 任意角色 | 只读，返回单个任务详情（含完整事件日志） |
+| `cancel_task` | 任意角色 | 将任务置为 `cancelled`（终态），仅对非终态任务有效 |
 
 ### create_task 参数
 
@@ -283,9 +285,10 @@ groupMode?: "chat" | "task";  // 默认 "chat"，创建后不可修改
   title: string,
   description: string,          // 包含验收标准
   assigneeTitle: string,         // 执行者角色名
+  reviewerTitle?: string,        // 验收者角色名（不填默认 leader；不能与 assigneeTitle 相同）
   dependsOnTaskIds?: string[],   // 前置任务 ID 列表，全部完成后才触发
   parentTaskId?: string,         // 父任务 ID（成员提子任务时填写）
-  autoApprove?: boolean,         // 默认 false
+  autoApprove?: boolean,         // 默认 false；true 时 assignee 提交即通过，忽略 reviewerTitle
 }
 ```
 
@@ -385,12 +388,13 @@ assignee submit_task
 
 ### 权限约束
 
-**`autoApprove=true` 只能由 leader 设置**：
-- leader 调用 `create_task` 时可传入 `autoApprove=true`
-- 成员调用 `create_task`（走 pending_approval 流程）时，若传入 `autoApprove=true`，app 强制改为 `false` 后再进入审批
-- leader 在 `approve_subtask` 时可以选择是否将其改为 `autoApprove=true`
+**`autoApprove`**：
+- 任何角色调用 `create_task` 时均可传入 `autoApprove=true`，适合低风险任务（提交即通过）
+- `autoApprove=true` 时 `reviewerTitle` 无效，任务在 `submit_task` 时直接变为 `done`
 
-这是为了防止成员自己给自己创建一个 autoApprove 任务从而绕过任何验收。
+**`assignee ≠ reviewer`**：
+- 代码层强制：若 `assigneeRoleId === reviewerRoleId`，`create_task` 直接返回错误
+- 防止自我验收绕过质量控制
 
 ---
 
@@ -457,7 +461,7 @@ assignee submit_task
 ```
 终态（已结束）：done / cancelled
 未完成任务定义：status 不是终态的任务
-具体：pending_approval / created / assigned / in_progress / blocked / submitted / reviewing / rejected / needs_intervention
+具体：created / assigned / in_progress / blocked / submitted / reviewing / rejected / needs_intervention
 ```
 
 存在此类任务时，`remove_group_role` / `update_group_role(enabled=false)` 直接返回错误，提示用户先把任务推进到终态或改派他人，再删除或禁用角色。
@@ -468,14 +472,21 @@ assignee submit_task
 
 ## 任务创建权限设计
 
-**成员可以提出子任务，但需要 leader 审批。**
+**任何角色（leader 或成员）均可直接创建任务，无需预审批。**
 
 这样设计的原因：
-- 成员比 leader 更了解自己任务的具体依赖，直接由成员发起上下文最准确
-- leader 无需手动转述，减少信息损耗
-- 保留 leader 对任务图的最终控制权，防止任务无序扩张
+- 成员比 leader 更了解自己任务的具体依赖，直接由成员发起上下文最准确，无需中转
+- 任务质量通过**验收阶段**把关，而不是在创建入口设门槛
+- 简化状态机：去掉 `pending_approval` 中间态，减少 dispatch 轮次
 
-成员提子任务时应填写 `parentTaskId`，便于 leader 在审批时理解上下文，也便于前端按父子关系展示任务树。
+**验收者（reviewer）设计：**
+- `create_task` 可通过 `reviewerTitle` 指定任意角色作为验收者
+- 不填则默认由 leader 验收
+- 代码强制：`assigneeRoleId ≠ reviewerRoleId`（不能自我验收）
+- `autoApprove=true` 时提交即通过，`reviewerTitle` 无效
+- 仅指定的 reviewer 才能调用 `approve_task` / `reject_task`（app 层权限校验）
+
+成员提子任务时应填写 `parentTaskId`，便于前端按父子关系展示任务树。
 
 ### leader 不自派任务
 
@@ -487,7 +498,7 @@ assignee submit_task
 
 ## 任务可见性
 
-**所有任务对群内所有成员全量可读**，包括 `pending_approval`、`blocked`、`done` 等所有状态的任务。
+**所有任务对群内所有成员全量可读**，包括 `blocked`、`done` 等所有状态的任务。
 
 这是任务模式正常运转的基础：
 
@@ -518,7 +529,7 @@ assignee submit_task
 请修改后重新调用 group_task(start_task) 认领并再次提交。
 ```
 
-**验收请求（通知 leader）：**
+**验收请求（通知 reviewer）：**
 ```
 [待验收] #{taskId} {title}
 执行者：{assigneeRoleTitle}
@@ -533,14 +544,6 @@ assignee submit_task
 阻塞原因：{note}
 等待前置任务：#{dependsOnTaskId} {dependsOnTaskTitle}
 前置任务完成后将自动恢复分配。
-```
-
-**子任务审批请求（通知 leader）：**
-```
-[子任务待审批] #{taskId} {title}
-提出方：{creatorRoleTitle}  父任务：#{parentTaskId}
-描述：{description}
-请调用 group_task(approve_subtask) 或 group_task(reject_subtask, note=...) 处理。
 ```
 
 ---
@@ -615,12 +618,11 @@ assignee submit_task
 | 1（最高） | `needs_user` | 有任意 `needs_intervention` 任务 |
 | 2 | `blocked` | 有 `blocked` 任务，且无 `in_progress` 任务 |
 | 3 | `in_progress` | 有至少一个 `assigned` / `in_progress` / `submitted` / `reviewing` 任务 |
-| 4 | `waiting_approval` | 有 `pending_approval` 任务（等 leader 审批子任务），且无更高优先级状态 |
-| 5 | `waiting_dependency` | 仅有 `created` 任务（等前置任务完成），无更高优先级状态 |
-| 6（最低） | `idle` | 无任何任务，或全部任务均为 `done` / `cancelled` |
+| 4 | `waiting_dependency` | 仅有 `created` 任务（等前置任务完成），无更高优先级状态 |
+| 5（最低） | `idle` | 无任何任务，或全部任务均为 `done` / `cancelled` |
 
 - `needs_user` 在前端顶部用显眼颜色提示用户介入
-- `waiting_approval` / `waiting_dependency` 用次要颜色提示 leader 有待处理事项，避免误认为空闲
+- `waiting_dependency` 用次要颜色提示有待处理事项，避免误认为空闲
 - 前端顶部状态徽标按此优先级显示，帮助用户快速感知群组当前最需要关注的事项
 
 ### 不再使用的群聊能力
@@ -649,7 +651,7 @@ assignee submit_task
 | `lib/task-mode/app-rpc-handlers.ts` | `group_task.*` 所有 RPC handler：状态机转换、依赖触发、同 assignee 串行化、循环检测、autoApprove 权限约束 |
 | `lib/task-mode/ingest.ts` | 任务模式独立 ingest：`state=final` 不走聊天路由；文本追加到 `task.textOutputs`；检测无响应触发 watchdog 重试 |
 | `lib/task-mode/watchdog.ts` | 任务模式专属 watchdog 定时器（独立于聊天模式 watchdog）：5 分钟兜底扫描 + 重试 + `needs_intervention` |
-| `lib/task-mode/dispatch.ts` | 任务 dispatch 消息构造（分配 / 退回 / 验收请求 / 阻塞通知 / 子任务审批请求）及对 Gateway 的推送封装 |
+| `lib/task-mode/dispatch.ts` | 任务 dispatch 消息构造（分配 / 退回 / 验收请求 / 阻塞通知）及对 Gateway 的推送封装 |
 | `lib/task-mode/cycle-detect.ts` | 循环依赖检测（DFS），仅在 `add_dependency` / `block_on` 时调用 |
 | `lib/task-mode/sse.ts` | 任务模式独立 SSE 推送：任务列表变更、textOutputs 变更 |
 
@@ -720,8 +722,8 @@ assignee submit_task
 3. 依赖触发逻辑 + 同 assignee 串行化队列
 4. 循环依赖检测（在 `add_dependency` / `block_on` 时触发）
 5. 动态依赖管理：`block_on` + `add_dependency`
-6. 成员提子任务 + leader 审批流程（`approve_subtask` / `reject_subtask`）
-7. autoApprove 权限约束（仅 leader 可设）
+6. 成员提子任务（直接进入 assigned，无需预审批）
+7. autoApprove 支持（提交即通过，忽略 reviewerTitle）
 8. 创建群组时模式选择
 9. 前端任务看板（基础版：列表 + 状态 + 对话区）
 10. assignee 文本输出 `textOutputs` 在 ingest 追加
@@ -803,13 +805,11 @@ app 进程重启后，持久化到 `app-data.json` 的任务数据（status、la
 | 功能点 | 状态 | 备注 |
 |---|---|---|
 | `group_task` tool schema 注册（插件侧） | ✅ | `plugins/customchat/group-task-tool.ts` |
-| `create_task`（leader 直接 assigned；成员走 pending_approval） | ✅ | `app-rpc-handlers.ts` |
+| `create_task`（任意角色直接 assigned，`reviewerTitle` 指定验收者，默认 leader） | ✅ | `app-rpc-handlers.ts` |
 | `start_task`（assigned / rejected → in_progress） | ✅ | |
 | `submit_task`（in_progress → reviewing 或 done） | ✅ | |
-| `approve_task`（reviewing → done，触发依赖链） | ✅ | |
-| `reject_task`（reviewing → rejected，退回队首） | ✅ | |
-| `approve_subtask`（pending_approval → assigned） | ✅ | |
-| `reject_subtask`（pending_approval → cancelled，通知 creator） | ✅ | |
+| `approve_task`（reviewing → done，触发依赖链；仅指定 reviewer 可调用） | ✅ | |
+| `reject_task`（reviewing → rejected，退回队首；仅指定 reviewer 可调用） | ✅ | |
 | `block_on`（in_progress → blocked，追加依赖，通知 leader） | ✅ | |
 | `add_dependency`（对未完成任务动态追加前置依赖） | ✅ | |
 | `list_tasks`（只读，全量返回） | ✅ | |
@@ -824,8 +824,8 @@ app 进程重启后，持久化到 `app-data.json` 的任务数据（status、la
 | 同 assignee 串行化：`hasActiveTask` 检查 + pending 队列 | ✅ | |
 | 当前任务终态后自动 flush 队首任务（`flushPendingDispatch`） | ✅ | |
 | `rejected` 不释放队列，退回任务排在队首 | ✅ | |
-| `autoApprove=true` 仅 leader 可设，成员调用强制 false | ✅ | |
-| `approve_subtask` 时 leader 可追加设置 `autoApprove=true` | ✅ | |
+| `autoApprove` 支持（提交即通过，忽略 reviewerTitle） | ✅ | |
+| `assignee ≠ reviewer` 代码强制校验 | ✅ | `app-rpc-handlers.ts` handleCreateTask |
 | 循环依赖检测（BFS + 父指针路径回溯，`block_on` / `add_dependency` 时触发） | ✅ | `lib/task-mode/cycle-detect.ts` |
 
 ### 四、消息 Dispatch 与提示词注入
@@ -838,7 +838,7 @@ app 进程重启后，持久化到 `app-data.json` 的任务数据（status、la
 | `group-task-leader.md` 提示词（含 `{{MEMBERS_LIST}}`） | ✅ | `prompt/group-task-leader.md` |
 | `group-task-member.md` 提示词（含 `{{MEMBERS_LIST}}`） | ✅ | `prompt/group-task-member.md` |
 | 用户消息直接投递给 leader（跳过 group_route） | ✅ | `lib/task-mode/group-task-message.ts` |
-| 分配 / 退回 / 验收请求 / 阻塞通知 / 子任务审批请求 消息模板 | ✅ | `dispatch.ts` buildXxx 系列函数 |
+| 分配 / 退回 / 验收请求 / 阻塞通知 消息模板 | ✅ | `dispatch.ts` buildXxx 系列函数 |
 | Watchdog 重试消息模板 | ✅ | `buildWatchdogRetryMessage` |
 
 ### 五、Ingest 处理

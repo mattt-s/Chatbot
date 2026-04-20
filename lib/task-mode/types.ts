@@ -9,17 +9,16 @@
 // ─────────────────────────────────────────────────────────────
 
 export type GroupTaskStatus =
-  | "pending_approval" // 成员提出的子任务，等 leader 审批
-  | "created"          // 已创建，等待前置任务完成
-  | "assigned"         // 已分配，等待认领
-  | "in_progress"      // 执行中
-  | "blocked"          // 执行中发现阻塞，等待新增前置任务完成后自动恢复
-  | "submitted"        // 已提交，等待验收
-  | "reviewing"        // leader 审核中
-  | "done"             // 已完成（终态）
-  | "rejected"         // 退回，自动 dispatch 给 assignee 重新执行（非终态）
+  | "created"            // 已创建，等待前置任务完成
+  | "assigned"           // 已分配，等待认领
+  | "in_progress"        // 执行中
+  | "blocked"            // 执行中发现阻塞，等待新增前置任务完成后自动恢复
+  | "submitted"          // 已提交，等待验收
+  | "reviewing"          // 验收者审核中
+  | "done"               // 已完成（终态）
+  | "rejected"           // 退回，自动 dispatch 给 assignee 重新执行（非终态）
   | "needs_intervention" // watchdog 达到重试上限，需用户介入（准终态）
-  | "cancelled";       // 用户主动放弃，永久终止（终态）
+  | "cancelled";         // 用户主动放弃，永久终止（终态）
 
 /** 真正的终态：不会再自动转换，可触发队列释放和下游依赖 */
 export const TASK_TERMINAL_STATUSES = new Set<GroupTaskStatus>(["done", "cancelled"]);
@@ -29,7 +28,6 @@ export const TASK_QUASI_TERMINAL_STATUSES = new Set<GroupTaskStatus>(["needs_int
 
 /** 未完成任务的状态（角色删除前需检查） */
 export const TASK_INCOMPLETE_STATUSES = new Set<GroupTaskStatus>([
-  "pending_approval",
   "created",
   "assigned",
   "in_progress",
@@ -51,9 +49,6 @@ export type GroupTaskEventType =
   | "submitted"
   | "approved"
   | "rejected"
-  | "subtask_requested"
-  | "subtask_approved"
-  | "subtask_rejected"
   | "blocked"
   | "dependency_added"
   | "watchdog_redispatched"
@@ -95,16 +90,26 @@ export interface StoredGroupTask {
   status: GroupTaskStatus;
   creatorRoleId: string;
   creatorRoleTitle: string;
+  /** 执行者 */
   assigneeRoleId?: string;
   assigneeRoleTitle?: string;
+  /**
+   * 验收者。autoApprove=false 时必填，且不能与 assigneeRoleId 相同。
+   * autoApprove=true 时忽略此字段（提交即通过）。
+   */
+  reviewerRoleId?: string;
+  reviewerRoleTitle?: string;
   /** 父任务 ID（成员提子任务时填写） */
   parentTaskId?: string;
   /**
    * 前置任务 ID 列表，所有前置任务均 done 后才自动触发本任务。
-   * 循环依赖检测：add_dependency / block_on 时触发 DFS 检测。
+   * 循环依赖检测：add_dependency / block_on 时触发。
    */
   dependsOnTaskIds: string[];
-  /** true = 提交即通过，无需 leader 验收。仅 leader 创建时可设置 */
+  /**
+   * true = 提交即通过，无需验收者审核。
+   * 任何创建者均可设置；autoApprove=false 时 assignee ≠ reviewer 由代码强制保证。
+   */
   autoApprove: boolean;
   submissionNote?: string;
   reviewNote?: string;
@@ -115,7 +120,7 @@ export interface StoredGroupTask {
   textOutputs: GroupTaskTextOutput[];
   /**
    * 当前活跃 dispatch 绑定的 Gateway runId。
-   * dispatch 后由 ingest lifecycle phase=start 写入，任务终态时清空。
+   * dispatch 后写入，任务终态时清空。
    */
   activeRunId?: string | null;
   /** watchdog 已重试 dispatch 的次数，达到阈值后置为 needs_intervention */
@@ -134,12 +139,11 @@ export interface StoredGroupTask {
 
 /** 群组状态聚合（任务模式专属，按优先级降序） */
 export type GroupTaskModeState =
-  | "needs_user"          // 有 needs_intervention 任务
-  | "blocked"             // 有 blocked 任务，无 in_progress
-  | "in_progress"         // 有 assigned/in_progress/submitted/reviewing 任务
-  | "waiting_approval"    // 有 pending_approval 任务
-  | "waiting_dependency"  // 仅有 created 任务（等前置）
-  | "idle";               // 无任务或全部 done/cancelled
+  | "needs_user"         // 有 needs_intervention 任务
+  | "blocked"            // 有 blocked 任务，无 in_progress
+  | "in_progress"        // 有 assigned/in_progress/submitted/reviewing 任务
+  | "waiting_dependency" // 仅有 created 任务（等前置）
+  | "idle";              // 无任务或全部 done/cancelled
 
 export interface GroupTaskView {
   id: string;
@@ -151,6 +155,8 @@ export interface GroupTaskView {
   creatorRoleTitle: string;
   assigneeRoleId?: string;
   assigneeRoleTitle?: string;
+  reviewerRoleId?: string;
+  reviewerRoleTitle?: string;
   parentTaskId?: string;
   dependsOnTaskIds: string[];
   autoApprove: boolean;
@@ -179,6 +185,8 @@ export function taskToView(task: StoredGroupTask): GroupTaskView {
     creatorRoleTitle: task.creatorRoleTitle,
     assigneeRoleId: task.assigneeRoleId,
     assigneeRoleTitle: task.assigneeRoleTitle,
+    reviewerRoleId: task.reviewerRoleId,
+    reviewerRoleTitle: task.reviewerRoleTitle,
     parentTaskId: task.parentTaskId,
     dependsOnTaskIds: task.dependsOnTaskIds,
     autoApprove: task.autoApprove,
@@ -197,7 +205,6 @@ export function taskToView(task: StoredGroupTask): GroupTaskView {
  * 从任务列表派生群组级聚合状态（按优先级）。
  */
 export function deriveGroupTaskModeState(tasks: StoredGroupTask[]): GroupTaskModeState {
-  // 只统计非终态任务
   const active = tasks.filter((t) => !TASK_TERMINAL_STATUSES.has(t.status));
 
   if (active.some((t) => t.status === "needs_intervention")) return "needs_user";
@@ -214,7 +221,6 @@ export function deriveGroupTaskModeState(tasks: StoredGroupTask[]): GroupTaskMod
   ) {
     return "in_progress";
   }
-  if (active.some((t) => t.status === "pending_approval")) return "waiting_approval";
   if (active.some((t) => t.status === "created")) return "waiting_dependency";
   return "idle";
 }

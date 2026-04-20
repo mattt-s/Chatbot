@@ -150,15 +150,6 @@ export function buildBlockedNotificationMessage(
     .join("\n");
 }
 
-export function buildSubtaskApprovalRequestMessage(task: StoredGroupTask): string {
-  return [
-    `[子任务待审批] #${task.id.slice(0, 8)} ${task.title}`,
-    `提出方：${task.creatorRoleTitle}${task.parentTaskId ? `  父任务：#${task.parentTaskId.slice(0, 8)}` : ""}`,
-    `描述：${task.description}`,
-    `请调用 group_task(action="approve_subtask", taskId="${task.id}") 或 group_task(action="reject_subtask", taskId="${task.id}", note=...) 处理。`,
-  ].join("\n");
-}
-
 // ─────────────────────────────────────────────────────────────
 // 实际发送
 // ─────────────────────────────────────────────────────────────

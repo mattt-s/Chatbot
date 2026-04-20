@@ -19,7 +19,6 @@ import type {
 // ─────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<GroupTaskStatus, { label: string; cls: string }> = {
-  pending_approval: { label: "待审批", cls: "bg-amber-100 text-amber-700 border border-amber-200" },
   created:          { label: "待分配", cls: "bg-gray-100 text-gray-500 border border-gray-200" },
   assigned:         { label: "已分配", cls: "bg-blue-50 text-blue-600 border border-blue-200" },
   in_progress:      { label: "执行中", cls: "bg-blue-100 text-blue-700 border border-blue-200" },
@@ -36,7 +35,6 @@ const GROUP_STATE_CFG: Record<GroupTaskModeState, { label: string; cls: string }
   needs_user:          { label: "⚠ 需要介入", cls: "bg-red-500 text-white" },
   blocked:             { label: "已阻塞", cls: "bg-orange-100 text-orange-700 border border-orange-200" },
   in_progress:         { label: "执行中", cls: "bg-blue-100 text-blue-700 border border-blue-200" },
-  waiting_approval:    { label: "待审批", cls: "bg-amber-100 text-amber-700 border border-amber-200" },
   waiting_dependency:  { label: "等待前置", cls: "bg-gray-100 text-gray-500 border border-gray-200" },
   idle:                { label: "空闲", cls: "bg-gray-100 text-gray-400 border border-gray-200" },
 };
@@ -368,7 +366,7 @@ export function TaskModeBoard({
     ["assigned", "in_progress", "submitted", "reviewing", "blocked"].includes(t.status),
   );
   const pendingTasks = tasks.filter((t) =>
-    ["pending_approval", "created", "rejected"].includes(t.status),
+    ["created", "rejected"].includes(t.status),
   );
   const doneTasks = tasks.filter((t) => t.status === "done" || t.status === "cancelled");
 

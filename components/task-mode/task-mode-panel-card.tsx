@@ -53,7 +53,6 @@ function computeGroupState(tasks: GroupTaskView[]): GroupTaskModeState {
     )
   )
     return "in_progress";
-  if (active.some((t) => t.status === "pending_approval")) return "waiting_approval";
   if (active.some((t) => t.status === "created")) return "waiting_dependency";
   return "idle";
 }
