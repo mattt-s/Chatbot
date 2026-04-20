@@ -68,26 +68,30 @@
 ```
 pending_approval → assigned → in_progress → submitted → reviewing → done
                 ↗                        ↘ blocked ↗           ↘ rejected → in_progress（重新执行）
-         created                                                             ↘ needs_intervention（需用户介入）
+         created                                                           ↘ needs_intervention → cancelled（用户放弃）
+                                                                                                ↘ assigned（用户重新唤起/改派）
 ```
 
-| 状态 | 含义 | 触发方 |
-|---|---|---|
-| `pending_approval` | 成员提出的子任务，等待 leader 审批 | 成员调用 `group_task(create_task)`（非 leader） |
-| `created` | 任务已创建，等待前置任务完成 | leader 或成员（成员走 pending_approval 先） |
-| `assigned` | 已分配给执行者，等待认领 | app 自动（创建时无前置 / 所有前置完成 / blocked 恢复 / reject 后退回） |
-| `in_progress` | 执行者认领，正在执行 | assignee 调用 `group_task(start_task)` |
-| `blocked` | 执行中发现阻塞，等待新追加的前置任务完成 | assignee 调用 `group_task(block_on)` |
-| `submitted` | 执行者提交，等待验收 | assignee 调用 `group_task(submit_task)` |
-| `reviewing` | leader 审核中 | app 自动（submit 后通知 leader） |
-| `done` | 验收通过 | leader 调用 `group_task(approve_task)` 或 autoApprove 自动通过 |
-| `rejected` | 验收不通过，退回执行者 | leader 调用 `group_task(reject_task)` |
-| `needs_intervention` | watchdog 检测到角色连续不响应，需要用户介入 | app 自动（watchdog 达到重试上限） |
+| 状态 | 含义 | 触发方 | 是否终态 |
+|---|---|---|---|
+| `pending_approval` | 成员提出的子任务，等待 leader 审批 | 成员调用 `group_task(create_task)`（非 leader） | 否 |
+| `created` | 任务已创建，等待前置任务完成 | leader 或成员（成员走 pending_approval 先） | 否 |
+| `assigned` | 已分配给执行者，等待认领 | app 自动（创建时无前置 / 所有前置完成 / blocked 恢复 / reject 后退回） | 否 |
+| `in_progress` | 执行者认领，正在执行 | assignee 调用 `group_task(start_task)` | 否 |
+| `blocked` | 执行中发现阻塞，等待新追加的前置任务完成 | assignee 调用 `group_task(block_on)` | 否 |
+| `submitted` | 执行者提交，等待验收 | assignee 调用 `group_task(submit_task)` | 否 |
+| `reviewing` | leader 审核中 | app 自动（submit 后通知 leader） | 否 |
+| `done` | 验收通过 | leader 调用 `group_task(approve_task)` 或 autoApprove 自动通过 | **是** |
+| `rejected` | 验收不通过，**退回执行者重做**（非终态，任务仍要继续） | leader 调用 `group_task(reject_task)` | 否 |
+| `needs_intervention` | watchdog 连续重试失败，需要用户介入 | app 自动（watchdog 达到重试上限） | **准终态**（可恢复） |
+| `cancelled` | 用户主动放弃任务，永久终止 | 用户在前端操作（仅限 `needs_intervention` 状态） | **是** |
 
 **关键规则：**
 - `start_task` 前置状态既可以是 `assigned` 也可以是 `rejected`（rejected 走同一路径重新开工）
-- `rejected` 状态对应的任务**重新退回到 assignee**，app 会 dispatch 退回消息，不需要 leader 手动重新分配
-- `needs_intervention` 状态需要用户在前端介入（重新唤起、改派、放弃等），app 不会自动恢复
+- `rejected` **不是终态**：任务退回后仍需被 assignee 重做。`rejected` 不释放该 assignee 的 pending dispatch 队列，退回的任务本身排在队首等待 start_task
+- 只有 `done` / `cancelled` 才是真正的终态，会触发队列释放和下游依赖检查
+- `needs_intervention` 是"准终态"：app 不再自动 dispatch，但用户可以恢复（重新唤起 → `assigned` / 改派 → `assigned` / 放弃 → `cancelled`）
+- `cancelled` 后其下游依赖任务不会被自动触发；如需继续，leader 应手动解除对应依赖或重新创建任务
 
 ---
 
@@ -118,10 +122,12 @@ pending_approval → assigned → in_progress → submitted → reviewing → do
 ```
 1. 新任务 status 保持 assigned，app 不立即 dispatch
 2. 加入该 assignee 的 pending dispatch 队列
-3. 当前任务终态（done / rejected / needs_intervention）或被 leader 通过 approve 推进后，app 从队列取下一个任务 dispatch
+3. 当前任务到达真正终态（done / cancelled）或到达 needs_intervention 后，app 从队列取下一个任务 dispatch
 ```
 
 队列按任务创建时间 FIFO 排序。**这个队列不是聊天模式的 busy 队列**，而是专属于任务模式的 assignee pending dispatch 队列，由 app 维护。
+
+> ⚠️ **`rejected` 不释放队列**：`rejected` 是"退回重做"，不是任务终结。被 reject 的任务本身会重新排在该 assignee 队首等待 start_task，此时不应同时 dispatch 队列中的其他任务，否则 assignee 会同时收到两个任务。队列释放只在 `done` / `cancelled` / `needs_intervention` 时触发。
 
 ### 带前置依赖的任务
 
@@ -159,9 +165,10 @@ type GroupTaskStatus =
   | "blocked"           // 执行中发现阻塞，等待新增的前置任务完成后自动恢复
   | "submitted"         // 已提交，等待验收
   | "reviewing"         // leader 审核中
-  | "done"              // 已完成
-  | "rejected"          // 退回，自动 dispatch 给 assignee 重新执行
-  | "needs_intervention";            // watchdog 达到重试上限，需用户介入
+  | "done"              // 已完成（终态）
+  | "rejected"          // 退回，自动 dispatch 给 assignee 重新执行（非终态）
+  | "needs_intervention"// watchdog 达到重试上限，需用户介入（准终态）
+  | "cancelled";        // 用户主动放弃，永久终止（终态）
 
 interface StoredGroupTask {
   id: string;
@@ -192,9 +199,18 @@ interface StoredGroupTask {
    * app 在 ingest 阶段追加一条记录，用于任务详情页回溯展示。
    */
   textOutputs: GroupTaskTextOutput[];
+  /**
+   * 当前活跃 dispatch 绑定的 Gateway runId。
+   * app 在 dispatch 消息后，通过 ingest 监听 assignee session 的 lifecycle phase=start 写入。
+   * 用途：
+   *   1. ingest 收到 state=final 时匹配 runId，精确判断"本次 dispatch 是否无响应"
+   *   2. textOutputs 追加时关联具体的 run
+   * 生命周期：assigned（dispatch 后写入）→ in_progress（保留）→ 任务终态（清空为 null）
+   */
+  activeRunId?: string | null;
   /** watchdog 已经重试 dispatch 的次数，达到阈值（默认 2）后任务置为 needs_intervention */
   watchdogRetryCount: number;
-  /** 最近一次 dispatch 的时间戳，watchdog 据此判断是否超时 */
+  /** 最近一次 dispatch 的时间戳，watchdog 据此判断是否超时（5 分钟兜底） */
   lastDispatchAt?: string;
   /** 完整事件日志，用于追溯 */
   events: GroupTaskEvent[];
@@ -221,6 +237,7 @@ interface GroupTaskEvent {
       | "subtask_approved" | "subtask_rejected"
       | "blocked" | "dependency_added"
       | "watchdog_redispatched" | "needs_intervention"
+      | "cancelled"
       | "comment";
   actorRoleId: string;
   actorRoleTitle: string;
@@ -286,7 +303,7 @@ groupMode?: "chat" | "task";  // 默认 "chat"，创建后不可修改
     └── 否 → 继续等待
 ```
 
-任何任务终态流转（done / rejected / needs_intervention / 被改派）后，app 都会检查对应 assignee 的 pending dispatch 队列，取队首任务执行 dispatch。
+任何任务到达真正终态（done / cancelled）或 needs_intervention 后，app 检查对应 assignee 的 pending dispatch 队列，取队首任务执行 dispatch。`rejected` 不触发队列推进（退回重做，任务本身仍占用该 assignee 的执行位）。
 
 ---
 
@@ -387,14 +404,19 @@ assignee submit_task
 
 **1. 事件驱动检测**（主路径）
 
-当 assignee 的 agent run 终态（`state=final` / `aborted` / `error`）到达任务模式 ingest 时，如果该 run 对应的 dispatch 任务仍然是 `assigned` 状态（即 assignee 没有调用 `start_task` 也没有调用 `submit_task`），app 判定本次 dispatch 无效响应。
+当 ingest 收到 assignee 的 agent run 终态（`state=final` / `aborted` / `error`）时：
+1. 先用事件中的 `runId` 匹配 `task.activeRunId`——只处理当前活跃 dispatch 对应的 run，忽略历史旧 run
+2. 若匹配，且任务仍为 `assigned` 状态（assignee 没有调用 `start_task` 也没有调用 `submit_task`），判定本次 dispatch 无效响应，触发重试流程
+
+> `activeRunId` 在 dispatch 后，通过监听 assignee session 的 `lifecycle phase=start` 事件写入（此时 Gateway 已分配真实 runId）。如果 lifecycle 事件先于任务 dispatch 到达（极端情况），可退回用 `lastDispatchAt` 兜底。
 
 **2. 时间兜底检测**（防御极端情况）
 
 针对 run 完全未启动、消息被丢弃、agent 彻底无响应等极端情况，app 运行一个**任务模式专属的 watchdog 定时器**（独立于聊天模式的 watchdog）：
 
-- 定期扫描所有 `status=assigned` 的任务
+- 定期扫描所有 `status=assigned` 且有 `lastDispatchAt` 的任务
 - 如果 `lastDispatchAt` 距今超过 **5 分钟** 仍未转入 `in_progress`，视同"无响应"，走同样的重试流程
+- 同一任务在一个扫描周期内只触发一次（用 `lastDispatchAt` 更新时间去重）
 
 两类检测共用计数器 `watchdogRetryCount` 和重试流程。
 
@@ -416,9 +438,11 @@ assignee submit_task
 ### 用户介入操作
 
 任务进入 `needs_intervention` 后，前端应提供操作入口：
-- **重新唤起**：重置 `watchdogRetryCount=0`，重新 dispatch 一次
-- **改派**：修改 `assigneeRoleId`，重置计数，dispatch 给新 assignee
-- **放弃**：将 task 置为 `rejected` 并附上放弃说明（可选：清理其下游依赖链）
+- **重新唤起**：重置 `watchdogRetryCount=0`、清空 `activeRunId`，重新 dispatch 一次，status → `assigned`
+- **改派**：修改 `assigneeRoleId` / `assigneeRoleTitle`，重置计数，dispatch 给新 assignee，status → `assigned`
+- **放弃**：status → `cancelled`，写入 `cancelled` 事件，附上放弃说明；下游依赖此任务的任务**不会**被自动触发，leader 需手动处理依赖链
+
+> 注意：`cancelled` 是独立终态，语义是"此任务永久终止，不再继续推进"，与 `rejected`（"退回重做"）完全不同。两者绝不能互用。
 
 ### in_progress 状态下的卡死
 
@@ -431,8 +455,9 @@ assignee submit_task
 在任务模式下，`remove_group_role` 和将 `enabled=false` 之前，app 必须检查该角色是否有未完成任务：
 
 ```
-未完成任务定义：status 不是 done / rejected / needs_intervention 的任务
-具体：assigned / in_progress / blocked / submitted / reviewing / pending_approval
+终态（已结束）：done / cancelled
+未完成任务定义：status 不是终态的任务
+具体：pending_approval / created / assigned / in_progress / blocked / submitted / reviewing / rejected / needs_intervention
 ```
 
 存在此类任务时，`remove_group_role` / `update_group_role(enabled=false)` 直接返回错误，提示用户先把任务推进到终态或改派他人，再删除或禁用角色。
@@ -581,16 +606,22 @@ assignee submit_task
 
 ### 群组状态聚合
 
-任务模式下，群级状态由任务列表派生，不再由 leader 手动维护（`manage_group_plan` 在任务模式下不生效）：
+任务模式下，群级状态由任务列表派生，不再由 leader 手动维护（`manage_group_plan` 在任务模式下不生效）。
 
-| 群状态 | 派生条件 |
-|---|---|
-| `idle` | 无任何任务，或全部任务 done |
-| `in_progress` | 有至少一个 assigned / in_progress / submitted / reviewing 任务 |
-| `blocked` | 没有 in_progress，但有 blocked 任务 |
-| `needs_user` | 有任意 needs_intervention 任务 |
+按以下优先级从高到低依次判断（满足则取该状态，不再往下）：
 
-`needs_user` 状态在前端顶部用显眼颜色提示用户介入。
+| 优先级 | 群状态 | 派生条件 |
+|---|---|---|
+| 1（最高） | `needs_user` | 有任意 `needs_intervention` 任务 |
+| 2 | `blocked` | 有 `blocked` 任务，且无 `in_progress` 任务 |
+| 3 | `in_progress` | 有至少一个 `assigned` / `in_progress` / `submitted` / `reviewing` 任务 |
+| 4 | `waiting_approval` | 有 `pending_approval` 任务（等 leader 审批子任务），且无更高优先级状态 |
+| 5 | `waiting_dependency` | 仅有 `created` 任务（等前置任务完成），无更高优先级状态 |
+| 6（最低） | `idle` | 无任何任务，或全部任务均为 `done` / `cancelled` |
+
+- `needs_user` 在前端顶部用显眼颜色提示用户介入
+- `waiting_approval` / `waiting_dependency` 用次要颜色提示 leader 有待处理事项，避免误认为空闲
+- 前端顶部状态徽标按此优先级显示，帮助用户快速感知群组当前最需要关注的事项
 
 ### 不再使用的群聊能力
 
@@ -701,6 +732,44 @@ assignee submit_task
 
 ---
 
+## 重启恢复策略
+
+app 进程重启后，持久化到 `app-data.json` 的任务数据（status、lastDispatchAt、watchdogRetryCount、assigneeRoleId 等）完整保留，不会丢失。需要重建的是两类**纯内存运行时状态**：
+
+### 1. pending dispatch 队列重建
+
+队列不持久化，重启后由 `lib/task-mode/store.ts` 在模块加载时自动重建：
+
+```
+扫描所有 groupTasks，按 panelId × assigneeRoleId 分组
+对每组：
+  1. 找出该 assignee 当前 status=in_progress / blocked 的任务（至多一个）
+  2. 将该 assignee 所有 status=assigned 且不是该任务的任务，按 createdAt 排序，加入 pending 队列
+  3. 若该 assignee 没有 in_progress/blocked 任务，取队首任务重新 dispatch
+     （dispatch 前先检查 lastDispatchAt 是否在 5 分钟内，避免重复 dispatch）
+```
+
+### 2. watchdog 定时器重启
+
+`lib/task-mode/watchdog.ts` 在模块初始化时启动定时器。重启后首次扫描时：
+
+- 所有 `status=assigned` 且 `lastDispatchAt` 距今超过 5 分钟的任务，立即触发 watchdog 重试流程
+- `activeRunId` 在重启后视为过期，清空为 `null`（对应 run 已不在内存中）；后续 dispatch 会写入新的 `activeRunId`
+
+### 3. 持久化字段与可重建字段对照
+
+| 字段 | 是否持久化 | 重启后处理 |
+|---|---|---|
+| `status` | ✅ 持久化 | 直接读取，无需处理 |
+| `lastDispatchAt` | ✅ 持久化 | 直接用于 watchdog 超时判断 |
+| `watchdogRetryCount` | ✅ 持久化 | 直接读取，计数不丢失 |
+| `assigneeRoleId` | ✅ 持久化 | 直接用于队列分组 |
+| `activeRunId` | ✅ 持久化（但需清空） | 重启后清空为 `null`，等新 dispatch 写入 |
+| pending dispatch 队列 | ❌ 纯内存 | 按上述规则从任务数据重建 |
+| watchdog 定时器 | ❌ 纯内存 | 模块加载时重新启动 |
+
+---
+
 ## 与群聊模式的边界
 
 - 两种模式仅共用**最低限度的共享物**：`StoredPanel` / `StoredGroupRole` 的结构定义、群组创建/删除的基础设施函数（`mutateData`、面板加载/权限校验等）
@@ -708,3 +777,4 @@ assignee submit_task
 - 任务模式不使用 `group_route` tool，路由完全由 `group_task` tool 的 app 侧 dispatch 控制
 - 任务模式的角色仍然使用 `manage_group_memory` 记忆工具（跨任务共享上下文）
 - **代码组织边界**：`lib/task-mode/*` 和 `components/task-mode/*` 是任务模式专属领土，聊天模式代码不 import 这两个目录下的任何东西，反之亦然（除共享基础设施）
+
