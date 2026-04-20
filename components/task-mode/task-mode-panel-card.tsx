@@ -245,7 +245,7 @@ export function TaskModePanelCard({
     }
   }
 
-  // ── SSE subscription ──
+  // ── Chat SSE subscription（对话区：用户 ↔ leader）──
 
   useEffect(() => {
     const source = new EventSource(`/api/panels/${panel.id}/stream`);
@@ -299,7 +299,6 @@ export function TaskModePanelCard({
         payload.state === "error"
       ) {
         setActiveRunId(null);
-        void fetchTasks();
       }
     });
 
@@ -308,7 +307,24 @@ export function TaskModePanelCard({
     source.onerror = onError;
 
     return () => source.close();
-  }, [panel.id, panel.kind, panel.sessionKey, fetchTasks]);
+  }, [panel.id, panel.kind, panel.sessionKey]);
+
+  // ── Tasks SSE subscription（看板：任意任务变更即推送）──
+
+  useEffect(() => {
+    const source = new EventSource(`/api/panels/${panel.id}/group-tasks/stream`);
+
+    source.addEventListener("tasks_updated", () => {
+      void fetchTasks();
+    });
+
+    // 连接断开后自动重连（浏览器 EventSource 默认会重连，此处仅标记状态）
+    source.onerror = () => {
+      // 不改变 streamStatus（那是 chat SSE 的状态），静默重连即可
+    };
+
+    return () => source.close();
+  }, [panel.id, fetchTasks]);
 
   // ── Send message ──
 

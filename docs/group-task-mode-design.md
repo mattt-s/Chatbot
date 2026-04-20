@@ -1,6 +1,6 @@
 # 群组任务模式技术方案
 
-> 状态：设计完成，待实现
+> 状态：实现中
 
 ## 概述
 
@@ -777,4 +777,157 @@ app 进程重启后，持久化到 `app-data.json` 的任务数据（status、la
 - 任务模式不使用 `group_route` tool，路由完全由 `group_task` tool 的 app 侧 dispatch 控制
 - 任务模式的角色仍然使用 `manage_group_memory` 记忆工具（跨任务共享上下文）
 - **代码组织边界**：`lib/task-mode/*` 和 `components/task-mode/*` 是任务模式专属领土，聊天模式代码不 import 这两个目录下的任何东西，反之亦然（除共享基础设施）
+
+---
+
+## 实现进度
+
+> 图例：✅ 已完成　⚠️ 部分实现/有偏差　❌ 未实现
+
+### 一、数据模型与持久化
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| `StoredGroupTask` 完整类型定义（含 `textOutputs`、`watchdogRetryCount`、`activeRunId` 等） | ✅ | `lib/task-mode/types.ts` |
+| `groupTasks` 持久化到 `app-data.json` | ✅ | `lib/store.ts` 序列化层 |
+| `StoredPanel.groupMode` 字段 | ✅ | `lib/types.ts` |
+| 任务 CRUD（create / get / update / list） | ✅ | `lib/task-mode/store.ts` |
+| 事件日志 append | ✅ | `appendTaskEvent` |
+| Pending dispatch 内存队列（enqueue / dequeue / requeue） | ✅ | `lib/task-mode/store.ts` |
+| `rebuildPendingDispatchQueues`（重启后重建队列） | ✅ | `lib/task-mode/store.ts` |
+| `clearAllActiveRunIds`（重启后清空 activeRunId） | ✅ | `lib/task-mode/store.ts` |
+| `readAllGroupTasks`（跨面板全量读取，供 watchdog 使用） | ✅ | `lib/store.ts` |
+
+### 二、group_task Tool 与 RPC Handler
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| `group_task` tool schema 注册（插件侧） | ✅ | `plugins/customchat/group-task-tool.ts` |
+| `create_task`（leader 直接 assigned；成员走 pending_approval） | ✅ | `app-rpc-handlers.ts` |
+| `start_task`（assigned / rejected → in_progress） | ✅ | |
+| `submit_task`（in_progress → reviewing 或 done） | ✅ | |
+| `approve_task`（reviewing → done，触发依赖链） | ✅ | |
+| `reject_task`（reviewing → rejected，退回队首） | ✅ | |
+| `approve_subtask`（pending_approval → assigned） | ✅ | |
+| `reject_subtask`（pending_approval → cancelled，通知 creator） | ✅ | |
+| `block_on`（in_progress → blocked，追加依赖，通知 leader） | ✅ | |
+| `add_dependency`（对未完成任务动态追加前置依赖） | ✅ | |
+| `list_tasks`（只读，全量返回） | ✅ | |
+| `get_task`（只读，单任务详情） | ✅ | |
+| `cancel_task`（任意非终态 → cancelled） | ✅ | |
+
+### 三、任务调度逻辑
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| 任务 done 后自动触发下游依赖任务（`triggerDependentTasks`） | ✅ | |
+| 同 assignee 串行化：`hasActiveTask` 检查 + pending 队列 | ✅ | |
+| 当前任务终态后自动 flush 队首任务（`flushPendingDispatch`） | ✅ | |
+| `rejected` 不释放队列，退回任务排在队首 | ✅ | |
+| `autoApprove=true` 仅 leader 可设，成员调用强制 false | ✅ | |
+| `approve_subtask` 时 leader 可追加设置 `autoApprove=true` | ✅ | |
+| 循环依赖检测（BFS + 父指针路径回溯，`block_on` / `add_dependency` 时触发） | ✅ | `lib/task-mode/cycle-detect.ts` |
+
+### 四、消息 Dispatch 与提示词注入
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| `dispatchTaskMessage` 封装（`sendInboundToPlugin` + `recordTaskDispatch`） | ✅ | `lib/task-mode/dispatch.ts` |
+| 所有 dispatch 调用传入 `isLeader` / `roleTitle` 参数 | ✅ | `app-rpc-handlers.ts` 全部 10 处调用 |
+| 首次 dispatch 自动注入任务模式系统提示词 | ✅ | `dispatch.ts` `isTaskModeFirstDispatch` 逻辑 |
+| `group-task-leader.md` 提示词（含 `{{MEMBERS_LIST}}`） | ✅ | `prompt/group-task-leader.md` |
+| `group-task-member.md` 提示词（含 `{{MEMBERS_LIST}}`） | ✅ | `prompt/group-task-member.md` |
+| 用户消息直接投递给 leader（跳过 group_route） | ✅ | `lib/task-mode/group-task-message.ts` |
+| 分配 / 退回 / 验收请求 / 阻塞通知 / 子任务审批请求 消息模板 | ✅ | `dispatch.ts` buildXxx 系列函数 |
+| Watchdog 重试消息模板 | ✅ | `buildWatchdogRetryMessage` |
+
+### 五、Ingest 处理
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| `customchat-ingest.ts` 入口分流（任务模式交给独立模块） | ✅ | |
+| leader 回复 → 存消息 + 发 SSE，展示在对话区 | ✅ | `lib/task-mode/ingest.ts` |
+| 非 leader 成员回复 → 追加到任务 `textOutputs`（`state=final` 时） | ✅ | `appendTaskTextOutputForRole` |
+| 事件驱动 watchdog：`state=final` 且任务仍为 `assigned` → 触发重试 | ✅ | `checkWatchdog` |
+| `activeRunId` 精确匹配 + 退回用角色+状态猜测 | ✅ | |
+
+### 六、Watchdog 与用户介入
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| 任务模式专属 watchdog 定时器（每 60 秒扫描） | ✅ | `lib/task-mode/watchdog.ts` |
+| 5 分钟兜底：`lastDispatchAt` 超时触发重试 | ✅ | `scanAndRetry` |
+| 重试计数 + 达到 MAX_RETRY(2) 置为 `needs_intervention` | ✅ | `watchdogRedispatch` |
+| `instrumentation.ts` 启动钩子（重建队列 + 清 activeRunId + 启动 watchdog） | ✅ | `instrumentation.ts` |
+| 用户介入 API（`POST /group-tasks/[taskId]`：cancel / redispatch / reset_watchdog） | ✅ | |
+| 用户介入 UI（任务详情里的"重新分配"和"取消任务"按钮） | ✅ | `task-mode-board.tsx` |
+| **改派（修改 assignee 后重新 dispatch）** | ❌ | 介入 API 只支持原 assignee 重新 dispatch，未实现改派给其他角色 |
+| `in_progress` 卡死的人工介入提示 | ⚠️ | 有取消按钮，但没有专门针对"执行中超时"的前端提示 |
+
+### 七、前端 UI
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| `components/panel-card.tsx` 顶层分流（`groupMode=task` → `TaskModePanelCard`） | ✅ | |
+| `task-mode-panel-card.tsx`（顶层容器，SSE 订阅，双栏布局） | ✅ | |
+| `task-mode-conversation.tsx`（对话区，消息过滤，composer） | ✅ | |
+| `task-mode-board.tsx`（任务看板，状态分组，详情面板） | ✅ | |
+| 对话区 SSE 过滤规则（只展示 user + leader，过滤壳消息） | ✅ | |
+| 任务看板刷新 | ✅ | 独立 SSE 端点 `/group-tasks/stream`；store 层所有写入函数（`updateGroupTaskStatus`、`updateGroupTaskField`、`appendTaskTextOutput`、`appendTaskEvent`、`addTaskDependency`、`recordTaskDispatch`、`createGroupTask`）完成后均调用 `publishGroupTasksUpdate(panelId)`，前端实时收到 `tasks_updated` 事件后重新拉取看板 |
+| 角色管理入口（添加角色 / 管理角色） | ✅ | `task-mode-panel-card.tsx` header |
+| 群组状态徽标（`GroupTaskModeState` 六级） | ✅ | |
+| 任务卡片（状态、执行者、前置数量、watchdog 警告） | ✅ | |
+| 任务详情（描述、提交说明、审核意见、textOutputs、事件日志） | ✅ | |
+| `needs_intervention` 操作区（重新分配、取消任务） | ✅ | |
+| **`task-mode-helpers.ts`（独立 helper 文件）** | ❌ | 相关逻辑内联在各组件中，未按设计单独提取为独立文件 |
+| **`task-mode-task-card.tsx`（独立 TaskCard 组件文件）** | ❌ | 内联在 `task-mode-board.tsx` 中，未单独拆文件 |
+| **任务依赖图可视化（`task-mode-dependency-graph.tsx`）** | ❌ | 设计标注为"后期"，未实现 |
+
+### 八、API 路由
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| `GET /api/panels/[panelId]/group-tasks`（任务列表） | ✅ | |
+| `POST /api/panels/[panelId]/group-tasks/[taskId]`（用户介入操作） | ✅ | |
+| **`GET /api/panels/[panelId]/group-tasks/stream`（任务变更 SSE 端点）** | ❌ | 设计要求独立 SSE 端点，未实现；前端用轮询替代 |
+
+### 九、架构隔离
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| `lib/task-mode/*` 独立目录 | ✅ | |
+| `components/task-mode/*` 独立目录 | ✅ | |
+| `customchat-ingest.ts` 入口分流（不在函数体内加 if 分支） | ✅ | |
+| `customchat-app-rpc.ts` group_task 分流到独立 handler | ✅ | |
+| `plugins/customchat/index.ts` 注册 `group_task` tool | ✅ | |
+| 创建群组时 `groupMode` 选择（群聊 / 任务） | ✅ | `create-group-dialog.tsx` |
+
+### 十、角色保护
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| **任务模式下删除/禁用角色前检查未完成任务** | ❌ | `handleRemoveGroupRole`（`customchat-app-rpc.ts`）和 `manage-group-roles-dialog.tsx` 均未加保护逻辑 |
+
+### 十一、重启恢复
+
+| 功能点 | 状态 | 备注 |
+|---|---|---|
+| 重启后重建 pending dispatch 队列 | ✅ | `instrumentation.ts` → `rebuildPendingDispatchQueues` |
+| 重启后清空 `activeRunId` | ✅ | `instrumentation.ts` → `clearAllActiveRunIds` |
+| 重启后启动 watchdog 定时器 | ✅ | `instrumentation.ts` → `startTaskModeWatchdog` |
+| **重启后对遗漏的 `assigned` 任务重新 dispatch** | ❌ | 设计文档要求重建队列时，若 assignee 无活跃任务应重新 dispatch 队首任务；`instrumentation.ts` 只重建了队列，未触发 dispatch |
+
+---
+
+### 未实现功能汇总（待补）
+
+| 优先级 | 功能 | 说明 |
+|---|---|---|
+| P1 | 角色删除/禁用保护 | `customchat-app-rpc.ts` `handleRemoveGroupRole` + `manage-group-roles-dialog.tsx` 需检查未完成任务 |
+| P1 | 重启后对遗漏任务重新 dispatch | `instrumentation.ts` 重建队列后，若 assignee 无 in_progress/blocked 任务，应立即 dispatch 队首 assigned 任务 |
+| P1 | 用户介入"改派"操作 | 修改 `assigneeRoleId` + 重新 dispatch，API 和 UI 均需新增 |
+| ~~P2~~ | ~~任务看板专属 SSE 端点~~ | ✅ 已完成 |
+| P3 | `task-mode-helpers.ts` 独立 helper 文件 | 将内联逻辑提取为独立文件 |
+| P3 | `task-mode-task-card.tsx` 独立组件文件 | 从 board.tsx 中拆出 |
+| 后期 | 任务依赖图可视化 | `task-mode-dependency-graph.tsx`，节点 + 连线，颜色对应状态 |
 

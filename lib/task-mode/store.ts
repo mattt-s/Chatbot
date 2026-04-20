@@ -24,6 +24,7 @@ import { TASK_TERMINAL_STATUSES } from "@/lib/task-mode/types";
 // 实际工程上最简单的做法：用 Next.js 的 "server-only" + 直接 import store 的公开函数
 // 对于 raw AppData 操作，我们通过新增导出的 mutateAppData/readAppData 来实现
 import { mutateGroupTasks, readGroupTasks } from "@/lib/store";
+import { publishGroupTasksUpdate } from "@/lib/task-mode/sse";
 
 const log = createLogger("task-mode:store");
 
@@ -165,6 +166,7 @@ export async function createGroupTask(input: {
     tasks.push(task);
   });
 
+  publishGroupTasksUpdate(input.panelId);
   return task;
 }
 
@@ -187,7 +189,7 @@ export async function updateGroupTaskStatus(
     note?: string;
   },
 ): Promise<StoredGroupTask> {
-  return mutateGroupTasks(panelId, (tasks) => {
+  const result = await mutateGroupTasks(panelId, (tasks) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) throw new Error(`Task not found: ${taskId}`);
 
@@ -217,6 +219,8 @@ export async function updateGroupTaskStatus(
 
     return task;
   });
+  publishGroupTasksUpdate(panelId);
+  return result;
 }
 
 export async function updateGroupTaskField<
@@ -233,6 +237,7 @@ export async function updateGroupTaskField<
     task[field] = value;
     task.updatedAt = nowIso();
   });
+  publishGroupTasksUpdate(panelId);
 }
 
 export async function appendTaskEvent(
@@ -250,6 +255,7 @@ export async function appendTaskEvent(
     });
     task.updatedAt = nowIso();
   });
+  publishGroupTasksUpdate(panelId);
 }
 
 export async function appendTaskTextOutput(
@@ -263,6 +269,7 @@ export async function appendTaskTextOutput(
     task.textOutputs.push({ id: crypto.randomUUID(), ...output });
     task.updatedAt = nowIso();
   });
+  publishGroupTasksUpdate(panelId);
 }
 
 export async function addTaskDependency(
@@ -278,6 +285,7 @@ export async function addTaskDependency(
       task.updatedAt = nowIso();
     }
   });
+  publishGroupTasksUpdate(panelId);
 }
 
 /**
@@ -295,6 +303,7 @@ export async function recordTaskDispatch(
     task.activeRunId = activeRunId;
     task.updatedAt = nowIso();
   });
+  publishGroupTasksUpdate(panelId);
 }
 
 /**
