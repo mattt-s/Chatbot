@@ -143,6 +143,9 @@ export interface GroupPlan {
   updatedByLabel?: string | null;
 }
 
+/** 群组协作模式：chat=消息驱动群聊, task=任务驱动协作 */
+export type GroupMode = "chat" | "task";
+
 /** 存储层：聊天面板（对话会话） */
 export interface StoredPanel {
   id: string;
@@ -156,6 +159,8 @@ export interface StoredPanel {
   sessionKey: string;
   /** 面板类型，默认 "direct" */
   kind?: PanelKind;
+  /** 群组协作模式，仅 kind="group" 时有效，默认 "chat"，创建后不可修改 */
+  groupMode?: GroupMode;
   /** 群任务状态，仅群组使用 */
   taskState?: GroupTaskState;
   /** 群任务状态最近一次变化时间，仅群组使用 */
@@ -212,6 +217,8 @@ export interface AppData {
   /** 群组角色列表 */
   groupRoles: StoredGroupRole[];
   settings?: StoredAppSettings;
+  /** 任务模式任务列表（仅 groupMode="task" 的群组使用） */
+  groupTasks?: import("./task-mode/types").StoredGroupTask[];
 }
 
 /** 会话中的用户信息（不含敏感字段） */
@@ -293,6 +300,8 @@ export interface PanelView {
   sessionKey: string;
   /** 面板类型 */
   kind: PanelKind;
+  /** 群组协作模式，仅 kind="group" 时有效，默认 "chat" */
+  groupMode?: GroupMode;
   /** 群任务状态，仅 kind="group" 时有效 */
   taskState?: GroupTaskState;
   /** 群计划，仅 kind="group" 时有效 */

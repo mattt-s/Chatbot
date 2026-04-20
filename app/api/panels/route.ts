@@ -14,6 +14,7 @@ const createPanelSchema = z.object({
   agentId: z.string().min(0).default(""),
   title: z.string().min(1).max(100),
   kind: z.enum(["direct", "group"]).optional().default("direct"),
+  groupMode: z.enum(["chat", "task"]).optional().default("chat"),
 });
 
 /**
@@ -59,6 +60,12 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    await createPanel(user.id, agentId, parsed.data.title, parsed.data.kind),
+    await createPanel(
+      user.id,
+      agentId,
+      parsed.data.title,
+      parsed.data.kind,
+      parsed.data.kind === "group" ? parsed.data.groupMode : undefined,
+    ),
   );
 }

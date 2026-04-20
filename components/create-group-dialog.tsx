@@ -1,11 +1,12 @@
 /**
  * @file 新建群组对话框组件。
  *
- * 让用户输入群组名称来创建一个新的群组面板。
+ * 让用户输入群组名称并选择协作模式（群聊 / 任务驱动）来创建新的群组面板。
  */
 "use client";
 
 import { useEffect, useState } from "react";
+import type { GroupMode } from "@/lib/types";
 
 /**
  * 新建群组对话框配置。
@@ -31,13 +32,15 @@ export function CreateGroupDialog({
   config: CreateGroupDialogConfig | null;
   isSubmitting: boolean;
   onClose: () => void;
-  onCreate: (input: { title: string }) => Promise<void> | void;
+  onCreate: (input: { title: string; groupMode: GroupMode }) => Promise<void> | void;
 }) {
   const [title, setTitle] = useState("");
+  const [groupMode, setGroupMode] = useState<GroupMode>("chat");
 
   useEffect(() => {
     if (config?.open) {
       setTitle("");
+      setGroupMode("chat");
     }
   }, [config]);
 
@@ -76,6 +79,44 @@ export function CreateGroupDialog({
           </label>
         </div>
 
+        <div className="mt-4">
+          <span className="mb-2 block text-sm font-medium text-[var(--ink-soft)]">
+            协作模式
+          </span>
+          <div className="flex gap-3">
+            {(
+              [
+                {
+                  value: "chat" as GroupMode,
+                  label: "群聊模式",
+                  desc: "消息驱动，角色自由对话",
+                },
+                {
+                  value: "task" as GroupMode,
+                  label: "任务模式",
+                  desc: "工单驱动，结构化执行",
+                },
+              ] as const
+            ).map(({ value, label, desc }) => (
+              <button
+                key={value}
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => setGroupMode(value)}
+                className={[
+                  "flex-1 rounded-2xl border px-4 py-3 text-left transition",
+                  groupMode === value
+                    ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                    : "border-black/10 hover:border-[var(--accent)]/50",
+                ].join(" ")}
+              >
+                <div className="text-sm font-semibold text-[var(--ink)]">{label}</div>
+                <div className="mt-0.5 text-xs text-[var(--ink-soft)]">{desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="mt-5 flex items-center justify-end gap-2">
           <button
             type="button"
@@ -89,7 +130,7 @@ export function CreateGroupDialog({
             type="button"
             disabled={isSubmitting || !title.trim()}
             onClick={async () => {
-              await onCreate({ title: title.trim() });
+              await onCreate({ title: title.trim(), groupMode });
             }}
             className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >

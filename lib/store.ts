@@ -59,6 +59,7 @@ const EMPTY_DATA: AppData = {
   panels: [],
   messages: [],
   groupRoles: [],
+  groupTasks: [],
   settings: {},
 };
 
@@ -161,12 +162,13 @@ async function readData(): Promise<AppData> {
   await initializeDataFile();
   const raw = await fs.readFile(getDataFilePath(), "utf8");
   const parsed = raw ? (JSON.parse(raw) as AppData) : EMPTY_DATA;
-  // Backward compat: older data files may lack groupRoles
+  // Backward compat: older data files may lack these fields
   parsed.panels = (parsed.panels ?? []).map((panel) => ({
     ...panel,
     groupPlan: sanitizeGroupPlan(panel.groupPlan),
   }));
   parsed.groupRoles = parsed.groupRoles ?? [];
+  parsed.groupTasks = parsed.groupTasks ?? [];
   parsed.settings = parsed.settings ?? {};
   parsed.messages = (parsed.messages ?? []).map((message) => ({
     ...message,
@@ -408,6 +410,7 @@ function panelToView(
     agentId: panel.agentId,
     sessionKey: panel.sessionKey,
     kind: panelKind,
+    groupMode: panelKind === "group" ? (panel.groupMode ?? "chat") : undefined,
     taskState: panelKind === "group" ? normalizeGroupTaskState(panel.taskState) : undefined,
     groupPlan: panelKind === "group" ? sanitizeGroupPlan(panel.groupPlan) : undefined,
     groupMemory: panelKind === "group" ? (panel.groupMemory ?? null) : undefined,
@@ -468,6 +471,7 @@ function createPanelRecord(
   agentId: string,
   title: string,
   kind: PanelKind = "direct",
+  groupMode?: import("./types").GroupMode,
 ) {
   const id = crypto.randomUUID();
   const createdAt = nowIso();
@@ -479,6 +483,7 @@ function createPanelRecord(
     agentId,
     sessionKey: buildSessionKey(agentId, id),
     kind,
+    groupMode: kind === "group" ? (groupMode ?? "chat") : undefined,
     taskState: kind === "group" ? "idle" : undefined,
     taskStateChangedAt: kind === "group" ? createdAt : undefined,
     groupPlan: kind === "group" ? null : undefined,
@@ -672,9 +677,10 @@ export async function createPanel(
   agentId: string,
   title: string,
   kind: PanelKind = "direct",
+  groupMode?: import("./types").GroupMode,
 ) {
   const panel = await mutateData((draft) => {
-    const panel = createPanelRecord(userId, agentId, title, kind);
+    const panel = createPanelRecord(userId, agentId, title, kind, groupMode);
     draft.panels.push(panel);
     return panelToView(panel, [], { groupRoles: draft.groupRoles });
   });
@@ -776,6 +782,7 @@ export async function deletePanel(userId: string, panelId: string) {
     draft.panels = draft.panels.filter((panel) => panel.id !== panelId);
     draft.messages = draft.messages.filter((message) => message.panelId !== panelId);
     draft.groupRoles = draft.groupRoles.filter((role) => role.panelId !== panelId);
+    draft.groupTasks = (draft.groupTasks ?? []).filter((task) => task.panelId !== panelId);
     await deleteStoredFiles(attachmentPaths);
     return { ok: true };
   });
@@ -1948,4 +1955,38 @@ export async function unsetGroupRoleLeader(
   });
 
   return nextRole;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Task-mode raw data access (used by lib/task-mode/store.ts)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 读取某面板下的所有任务（只读）。
+ */
+export async function readGroupTasks(panelId: string) {
+  const data = await readData();
+  return (data.groupTasks ?? []).filter((t) => t.panelId === panelId);
+}
+
+/**
+ * 对 groupTasks 数组执行变更回调，自动持久化。
+ * callback 接收全局 groupTasks 数组引用（可直接修改），返回值透传。
+ */
+export async function mutateGroupTasks<T = void>(
+  _panelId: string,
+  callback: (tasks: import("./task-mode/types").StoredGroupTask[]) => T,
+): Promise<T> {
+  return mutateData((draft) => {
+    draft.groupTasks = draft.groupTasks ?? [];
+    return callback(draft.groupTasks) as T;
+  });
+}
+
+/**
+ * 读取全量 groupTasks（所有面板），供 watchdog 扫描使用。
+ */
+export async function readAllGroupTasks() {
+  const data = await readData();
+  return structuredClone(data.groupTasks ?? []);
 }

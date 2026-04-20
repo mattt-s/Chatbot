@@ -205,6 +205,12 @@ export async function ingestCustomChatDelivery(rawPayload: unknown) {
     throw new Error("Panel not found.");
   }
 
+  // ── 入口分流：任务模式交给独立模块，后续代码不再执行 ──
+  if (panel.kind === "group" && panel.groupMode === "task") {
+    const { ingestTaskModeDelivery } = await import("@/lib/task-mode/ingest");
+    return ingestTaskModeDelivery(panel, parsed, targetHint);
+  }
+
   const attachments = await materializeAttachments(parsed.attachments);
   const runId =
     parsed.runId?.trim() ||

@@ -100,6 +100,19 @@ export function PanelCard({
   onOpenSidebar,
   onPanelReplaced,
 }: PanelCardProps) {
+  // ── 顶层分流：任务模式交给完全独立的组件 ──
+  if (panel.kind === "group" && panel.groupMode === "task") {
+    const { TaskModePanelCard } = require("@/components/task-mode/task-mode-panel-card");
+    return (
+      <TaskModePanelCard
+        panel={panel}
+        agents={agents}
+        onOpenSidebar={onOpenSidebar}
+        onPanelReplaced={onPanelReplaced}
+      />
+    );
+  }
+
   const [messages, setMessages] = useState<MessageView[]>(panel.messages);
   const [draft, setDraft] = useState("");
   const [selectedMentionRoleIds, setSelectedMentionRoleIds] = useState<string[]>([]);

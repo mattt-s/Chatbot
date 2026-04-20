@@ -259,7 +259,7 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
     setIsCreating(false);
   }
 
-  async function createGroup(input: { title: string }) {
+  async function createGroup(input: { title: string; groupMode?: string }) {
     setIsCreatingGroup(true);
     const response = await fetch("/api/panels", {
       method: "POST",
@@ -268,6 +268,7 @@ export function DashboardShell({ initialData }: { initialData: DashboardData }) 
         agentId: "",
         title: input.title,
         kind: "group",
+        groupMode: input.groupMode ?? "chat",
       }),
     });
     const payload = (await response.json().catch(() => null)) as PanelView | null;

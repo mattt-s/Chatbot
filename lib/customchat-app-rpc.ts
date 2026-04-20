@@ -548,6 +548,19 @@ export function consumeRouteIntent(runId: string): PendingRouteIntent | null {
   return intent ?? null;
 }
 
+// ─────────────────────────────────────────────────────────────
+// group_task.* handler（任务模式，完全独立于聊天模式）
+// ─────────────────────────────────────────────────────────────
+
+async function handleGroupTask(params: AppRpcParams) {
+  const { dispatchGroupTaskRpc } = await import("@/lib/task-mode/app-rpc-handlers");
+  const panelId = typeof params.panelId === "string" ? params.panelId.trim() : "";
+  const action = typeof params.action === "string" ? params.action.trim() : "";
+  if (!panelId) throw new Error("group_task: panelId is required.");
+  if (!action) throw new Error("group_task: action is required.");
+  return dispatchGroupTaskRpc(panelId, action, params);
+}
+
 /**
  * 分发 Plugin → App 管理类 RPC。
  */
@@ -592,6 +605,9 @@ export async function dispatchCustomChatAppRpc(
       return handleSetGroupLeader(user, params);
     case "group_role.remove":
       return handleRemoveGroupRole(user, params);
+    // ── 任务模式（入口分流，后续完全由 task-mode 模块处理）──
+    case "group_task":
+      return handleGroupTask(params);
     default:
       throw new Error(`Unknown App RPC method: ${method}`);
   }
