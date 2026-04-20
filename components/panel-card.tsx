@@ -22,6 +22,7 @@ import type {
 } from "@/lib/types";
 
 import type { GroupRoleView } from "@/lib/types";
+import { TaskModePanelCard } from "@/components/task-mode/task-mode-panel-card";
 
 import {
   applyChatEventToMessages,
@@ -83,7 +84,20 @@ function buildLatestMessagePreview(messages: MessageView[]) {
 }
 
 /**
- * 聊天面板卡片。
+ * 面板卡片入口。
+ *
+ * 根据 panel.groupMode 分流：任务模式 → TaskModePanelCard，其余 → ChatModePanelCard。
+ * 本组件不持有任何 hook，纯条件渲染，符合 React Rules of Hooks。
+ */
+export function PanelCard(props: PanelCardProps) {
+  if (props.panel.kind === "group" && props.panel.groupMode === "task") {
+    return <TaskModePanelCard {...props} />;
+  }
+  return <ChatModePanelCard {...props} />;
+}
+
+/**
+ * 聊天模式面板卡片。
  *
  * 渲染完整的单面板聊天界面：头部状态栏 + 消息列表 + 输入框。
  * 内部通过 SSE 订阅实时接收 Gateway 推送的聊天事件，
@@ -94,25 +108,12 @@ function buildLatestMessagePreview(messages: MessageView[]) {
  * @param props.onOpenSidebar - 打开侧边栏回调
  * @param props.onPanelReplaced - 面板更新回调
  */
-export function PanelCard({
+function ChatModePanelCard({
   panel,
   agents,
   onOpenSidebar,
   onPanelReplaced,
 }: PanelCardProps) {
-  // ── 顶层分流：任务模式交给完全独立的组件 ──
-  if (panel.kind === "group" && panel.groupMode === "task") {
-    const { TaskModePanelCard } = require("@/components/task-mode/task-mode-panel-card");
-    return (
-      <TaskModePanelCard
-        panel={panel}
-        agents={agents}
-        onOpenSidebar={onOpenSidebar}
-        onPanelReplaced={onPanelReplaced}
-      />
-    );
-  }
-
   const [messages, setMessages] = useState<MessageView[]>(panel.messages);
   const [draft, setDraft] = useState("");
   const [selectedMentionRoleIds, setSelectedMentionRoleIds] = useState<string[]>([]);

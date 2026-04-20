@@ -13,13 +13,12 @@ import crypto from "node:crypto";
 
 import { publishCustomChatEvent } from "@/lib/customchat-events";
 import {
-  findMessageByRunId,
   listGroupRoles,
+  readGroupTasks,
   setPanelActiveRun,
   upsertAssistantMessage,
   upsertAssistantRuntimeSteps,
 } from "@/lib/store";
-import { readGroupTasks, mutateGroupTasks } from "@/lib/store";
 import { extractGroupRoleIdFromTarget, nowIso } from "@/lib/utils";
 import { createLogger } from "@/lib/logger";
 import type { ChatEventPayload, StoredPanel } from "@/lib/types";
@@ -73,7 +72,6 @@ export async function ingestTaskModeDelivery(
   });
 
   const groupRoles = await listGroupRoles(panel.id);
-  const leaderRole = groupRoles.find((r) => r.isLeader && r.enabled) ?? null;
 
   // 解析发送角色
   const groupRoleId = extractGroupRoleIdFromTarget(targetHint) ?? null;
@@ -89,8 +87,6 @@ export async function ingestTaskModeDelivery(
   if (incomingRuntimeSteps.length > 0) {
     await upsertAssistantRuntimeSteps(panel.id, runId, incomingRuntimeSteps);
   }
-
-  const existingMessage = await findMessageByRunId(panel.id, runId);
 
   // ── 对话区：只展示用户消息和 leader 回复 ──
   const shouldShowInConversation = !groupRoleId || isLeader;

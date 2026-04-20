@@ -33,7 +33,6 @@ import { TASK_TERMINAL_STATUSES } from "@/lib/task-mode/types";
 import { readGroupTasks } from "@/lib/store";
 import { listGroupRoles } from "@/lib/store";
 import { createLogger } from "@/lib/logger";
-import { nowIso } from "@/lib/utils";
 
 const log = createLogger("task-mode:rpc");
 
