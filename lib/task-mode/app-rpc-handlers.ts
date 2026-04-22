@@ -59,6 +59,11 @@ function readBool(params: RpcParams, key: string, defaultValue = false): boolean
 /** 通过 panelId 和 roleTitle 找到角色信息。 */
 async function resolveRoleByTitle(panelId: string, roleTitle: string) {
   const roles = await listGroupRoles(panelId);
+  if (roles.length === 0) {
+    throw new Error(
+      `群组 panelId "${panelId}" 未找到任何角色。请确认传入的是真实 panelId（不要填群名）。`,
+    );
+  }
   const role = roles.find((r) => r.title === roleTitle && r.enabled);
   if (!role) throw new Error(`角色 "${roleTitle}" 不存在或已禁用。`);
   return role;
@@ -77,6 +82,11 @@ async function resolveCallerRole(panelId: string, params: RpcParams) {
   const callerRoleId = readStr(params, "callerRoleId");
   const callerRoleTitle = readStr(params, "callerRoleTitle");
   const roles = await listGroupRoles(panelId);
+  if (roles.length === 0) {
+    throw new Error(
+      `群组 panelId "${panelId}" 未找到任何角色。请确认传入的是真实 panelId（不要填群名）。`,
+    );
+  }
 
   if (callerRoleId) {
     const role = roles.find((r) => r.id === callerRoleId);

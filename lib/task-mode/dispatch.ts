@@ -66,7 +66,7 @@ function applyTemplateVars(template: string, vars: Record<string, string>): stri
 
 function buildTaskModePrompt(
   isLeader: boolean,
-  vars: { roleName: string; groupName: string; membersList: string },
+  vars: { roleName: string; groupName: string; membersList: string; panelId: string },
 ): string {
   const filename = isLeader ? "group-task-leader.md" : "group-task-member.md";
   const template = loadPromptFile(filename);
@@ -75,6 +75,7 @@ function buildTaskModePrompt(
     ROLE_NAME: vars.roleName,
     GROUP_NAME: vars.groupName,
     MEMBERS_LIST: vars.membersList,
+    PANEL_ID: vars.panelId,
   });
 }
 
@@ -196,6 +197,7 @@ export async function dispatchTaskMessage(params: {
       roleName: params.roleTitle ?? params.roleId,
       groupName: panelTitle ?? params.groupPanel?.title ?? params.panelId,
       membersList,
+      panelId: params.panelId,
     });
     if (prompt) {
       textToSend = `${prompt}\n\n${params.text}`;

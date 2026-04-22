@@ -153,6 +153,7 @@ export async function submitGroupTaskMessage(
         ROLE_NAME: leader.title,
         GROUP_NAME: input.panel.title,
         MEMBERS_LIST: membersList,
+        PANEL_ID: input.panel.id,
       });
       textToSend = `${prompt}\n\n[来自用户]:\n${messageText}`;
     } else {

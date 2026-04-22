@@ -7,7 +7,8 @@ const GROUP_TASK_TOOL_SCHEMA = {
   properties: {
     panelId: {
       type: "string",
-      description: "当前群组面板 ID。",
+      description:
+        "当前群组面板 ID（必须是真实 panelId，通常为 UUID）。不要填写群组名称（例如 blog）。",
     },
     action: {
       type: "string",
@@ -99,6 +100,7 @@ export function registerCustomChatGroupTaskTool(api: CustomChatToolApi) {
     description: [
       "Manage tasks in a CustomChat task-mode group.",
       "Use this tool to create, start, submit, approve, reject, or query tasks.",
+      "panelId must be the real group panelId (ID), not the group title/name.",
       "Always pass callerRoleId or callerRoleTitle so the app can identify the calling role.",
       "Available actions: create_task, start_task, submit_task, approve_task, reject_task,",
       "block_on, add_dependency, list_tasks, get_task, cancel_task.",
