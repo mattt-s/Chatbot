@@ -1519,7 +1519,7 @@ export async function listPanelMessages(panelId: string): Promise<MessageView[]>
 export async function setGroupPanelTaskState(
   panelId: string,
   taskState: GroupTaskState,
-  _source?: "leader" | "manual",
+  _source?: "leader" | "manual", // eslint-disable-line @typescript-eslint/no-unused-vars
 ): Promise<PanelView> {
   return mutateData((draft) => {
     const panel = draft.panels.find((candidate) => candidate.id === panelId);

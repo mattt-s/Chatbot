@@ -133,16 +133,27 @@ export function TaskModeConversation({
   const prevLenRef = useRef(0);
 
   // ── 消息过滤：只展示用户和 leader ──
-  const visibleMessages = messages.filter((msg) => {
-    // 过滤空壳消息（bridge delivery 噪音）
-    if (isBridgeDeliveryMessagePlaceholder(msg)) return false;
-    if (msg.role === "user") return true;
-    if (msg.role === "assistant") {
-      // 无 groupRoleId（直接对话），或 groupRoleId 匹配 leader
-      return !msg.groupRoleId || msg.groupRoleId === leaderRoleId;
-    }
-    return false;
-  });
+  const visibleMessages = (() => {
+    const seen = new Set<string>();
+    return messages.filter((msg) => {
+      // 过滤空壳消息（bridge delivery 噪音）
+      if (isBridgeDeliveryMessagePlaceholder(msg)) return false;
+      if (msg.role === "user") {
+        if (seen.has(msg.id)) return false;
+        seen.add(msg.id);
+        return true;
+      }
+      if (msg.role === "assistant") {
+        // 无 groupRoleId（直接对话），或 groupRoleId 匹配 leader
+        if (!msg.groupRoleId || msg.groupRoleId === leaderRoleId) {
+          if (seen.has(msg.id)) return false;
+          seen.add(msg.id);
+          return true;
+        }
+      }
+      return false;
+    });
+  })();
 
   // 新消息到来时滚动到底部
   useEffect(() => {

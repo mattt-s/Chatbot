@@ -34,7 +34,7 @@ import { TaskModeConversation } from "./task-mode-conversation";
 // ─────────────────────────────────────────────────────────────
 
 function randomId() {
-  return Math.random().toString(36).substring(2, 15);
+  return crypto.randomUUID();
 }
 
 const TERMINAL_STATUSES = new Set<GroupTaskStatus>(["done", "cancelled"]);
@@ -109,7 +109,6 @@ export function TaskModePanelCard({
 
   useEffect(() => { activeRunIdRef.current = activeRunId; }, [activeRunId]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
-  useEffect(() => { setGroupRoles(panel.groupRoles ?? []); }, [panel.groupRoles]);
 
   // ── 菜单 outside-click 关闭 ──
   useEffect(() => {

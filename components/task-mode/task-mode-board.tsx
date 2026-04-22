@@ -114,11 +114,13 @@ function SectionLabel({ label }: { label: string }) {
 
 function TaskDetail({
   task,
+  allTasks,
   panelId,
   onClose,
   onTaskUpdated,
 }: {
   task: GroupTaskView;
+  allTasks: GroupTaskView[];
   panelId: string;
   onClose: () => void;
   onTaskUpdated: () => void;
@@ -202,6 +204,40 @@ function TaskDetail({
           </div>
         )}
 
+        {/* Dependencies */}
+        {task.dependsOnTaskIds.length > 0 && (
+          <div>
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">
+              前置依赖（{task.dependsOnTaskIds.length}）
+            </div>
+            <div className="space-y-1.5">
+              {task.dependsOnTaskIds.map((depId) => {
+                const dep = allTasks.find((t) => t.id === depId);
+                return (
+                  <div
+                    key={depId}
+                    className="flex items-center gap-2 rounded-xl border border-black/8 bg-[var(--paper-2)] px-3 py-1.5"
+                  >
+                    {dep ? (
+                      <>
+                        <StatusBadge status={dep.status} />
+                        <span className="text-xs text-[var(--ink)]">{dep.title}</span>
+                        {dep.assigneeRoleTitle && (
+                          <span className="ml-auto text-[10px] text-[var(--ink-soft)]">
+                            {dep.assigneeRoleTitle}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-xs text-[var(--ink-soft)]">{depId}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Submission note */}
         {task.submissionNote && (
           <div>
@@ -265,26 +301,30 @@ function TaskDetail({
         )}
 
         {/* Text outputs */}
-        {task.textOutputs.length > 0 && (
+        {(task.textOutputs.length > 0 || ["in_progress", "assigned", "submitted", "reviewing"].includes(task.status)) && (
           <div>
             <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-soft)]">
-              执行输出（{task.textOutputs.length} 条）
+              执行输出{task.textOutputs.length > 0 ? `（${task.textOutputs.length} 条）` : ""}
             </div>
             <div className="space-y-3">
-              {task.textOutputs.map((output) => (
-                <div
-                  key={output.id}
-                  className="rounded-2xl border border-black/8 bg-[var(--paper-2)] p-3"
-                >
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-[var(--ink)]">{output.roleTitle}</span>
-                    <span className="text-[10px] text-[var(--ink-soft)]">{fmtTime(output.ts)}</span>
+              {task.textOutputs.length === 0 ? (
+                <p className="text-xs text-[var(--ink-soft)] italic">执行中，暂无输出…</p>
+              ) : (
+                task.textOutputs.map((output) => (
+                  <div
+                    key={output.id}
+                    className="rounded-2xl border border-black/8 bg-[var(--paper-2)] p-3"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium text-[var(--ink)]">{output.roleTitle}</span>
+                      <span className="text-[10px] text-[var(--ink-soft)]">{fmtTime(output.ts)}</span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-[var(--ink-soft)] whitespace-pre-wrap line-clamp-8">
+                      {output.text}
+                    </p>
                   </div>
-                  <p className="text-xs leading-relaxed text-[var(--ink-soft)] whitespace-pre-wrap line-clamp-8">
-                    {output.text}
-                  </p>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}
@@ -486,6 +526,7 @@ export function TaskModeBoard({
         <div className="min-w-0 flex-1 overflow-hidden">
           <TaskDetail
             task={selectedTask}
+            allTasks={tasks}
             panelId={panelId}
             onClose={() => setSelectedId(null)}
             onTaskUpdated={onRefresh}

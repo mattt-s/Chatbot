@@ -69,14 +69,6 @@ async function resolveRoleByTitle(panelId: string, roleTitle: string) {
   return role;
 }
 
-/** 找到 leader 角色（用于 block_on 通知等）。 */
-async function resolveLeaderRole(panelId: string) {
-  const roles = await listGroupRoles(panelId);
-  const leader = roles.find((r) => r.isLeader && r.enabled);
-  if (!leader) throw new Error("该群组没有设置 leader 角色。");
-  return leader;
-}
-
 /** 找到调用方角色。 */
 async function resolveCallerRole(panelId: string, params: RpcParams) {
   const callerRoleId = readStr(params, "callerRoleId");
