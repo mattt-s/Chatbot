@@ -127,6 +127,31 @@ export function TaskModePanelCard({
   const leaderRoleId = leaderRole?.id ?? null;
   useEffect(() => { leaderRoleIdRef.current = leaderRoleId; }, [leaderRoleId]);
 
+  // ── Message hydration（初始加载不含消息，mount 后补全）──
+
+  useEffect(() => {
+    const shouldHydrate =
+      !panel.messagesLoaded && panel.messageCount > 0 && messages.length === 0;
+    console.log('[HYDRATION]', { shouldHydrate, messagesLoaded: panel.messagesLoaded, messageCount: panel.messageCount, messagesLen: messages.length, panelId: panel.id });
+    if (!shouldHydrate) return;
+    let cancelled = false;
+    const hydrate = async () => {
+      const resp = await fetch(`/api/panels/${panel.id}`, { cache: "no-store" }).catch(() => null);
+      console.log('[HYDRATION] fetch resp ok=', resp?.ok, 'cancelled=', cancelled);
+      if (!resp?.ok || cancelled) return;
+      const payload = (await resp.json().catch(() => null)) as PanelView | null;
+      console.log('[HYDRATION] payload messages=', payload?.messages?.length ?? 'null');
+      if (!payload || cancelled) return;
+      setMessages(payload.messages ?? []);
+      if (payload.activeRunId !== undefined) setActiveRunId(payload.activeRunId);
+      if (Array.isArray(payload.groupRoles)) setGroupRoles(payload.groupRoles);
+    };
+    void hydrate();
+    return () => { cancelled = true; };
+  // 仅在面板 ID 或 messageCount 变化时重新触发，避免循环
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel.id, panel.messageCount, panel.messagesLoaded]);
+
   // ── Task fetch ──
 
   const fetchTasks = useCallback(async () => {
