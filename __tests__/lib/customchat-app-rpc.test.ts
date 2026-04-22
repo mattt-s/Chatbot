@@ -287,7 +287,7 @@ describe("dispatchCustomChatAppRpc", () => {
       ],
     });
 
-    expect(mockCreatePanel).toHaveBeenCalledWith("u-admin", "", "博客开发群", "group");
+    expect(mockCreatePanel).toHaveBeenCalledWith("u-admin", "", "博客开发群", "group", undefined);
     expect(mockCreateGroupRole).toHaveBeenCalledTimes(2);
     expect(mockResetInitializedRoles).toHaveBeenCalledWith("panel-1");
     expect(result).toMatchObject({
@@ -298,6 +298,29 @@ describe("dispatchCustomChatAppRpc", () => {
         { title: "RD", agentId: "main", isLeader: false },
       ],
     });
+  });
+
+  it("group.create 支持 groupMode=task", async () => {
+    const { dispatchCustomChatAppRpc } = await import("@/lib/customchat-app-rpc");
+
+    await dispatchCustomChatAppRpc("group.create", {
+      title: "任务协作群",
+      groupMode: "task",
+      roles: [{ title: "Leader", agentId: "pm", isLeader: true }],
+    });
+
+    expect(mockCreatePanel).toHaveBeenCalledWith("u-admin", "", "任务协作群", "group", "task");
+  });
+
+  it("group.create 传入非法 groupMode 时报错", async () => {
+    const { dispatchCustomChatAppRpc } = await import("@/lib/customchat-app-rpc");
+
+    await expect(
+      dispatchCustomChatAppRpc("group.create", {
+        title: "任务协作群",
+        groupMode: "invalid-mode",
+      }),
+    ).rejects.toThrow("groupMode must be 'chat' or 'task'.");
   });
 
   it("group_role.set_leader 默认设置组长，enabled=false 时取消组长", async () => {

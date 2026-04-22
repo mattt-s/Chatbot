@@ -44,6 +44,29 @@ describe("registerCustomChatGroupManagementTool", () => {
     });
   });
 
+  it("create_group 支持透传 groupMode=task", async () => {
+    const { registerCustomChatGroupManagementTool } = await import(
+      "@/plugins/customchat/group-management-tool"
+    );
+    const registerTool = vi.fn();
+
+    registerCustomChatGroupManagementTool({ registerTool });
+
+    const tool = registerTool.mock.calls[0][0];
+    await tool.execute("call-1-task", {
+      action: "create_group",
+      title: "任务群",
+      groupMode: "task",
+      roles: [{ title: "Leader", agentId: "main", isLeader: true }],
+    });
+
+    expect(mockSendPortalAppRpc).toHaveBeenCalledWith("group.create", {
+      title: "任务群",
+      groupMode: "task",
+      roles: [{ title: "Leader", agentId: "main", isLeader: true }],
+    });
+  });
+
   it("把 set_group_leader action 翻译成 group_role.set_leader app_rpc", async () => {
     const { registerCustomChatGroupManagementTool } = await import(
       "@/plugins/customchat/group-management-tool"

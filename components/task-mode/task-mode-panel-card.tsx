@@ -132,15 +132,12 @@ export function TaskModePanelCard({
   useEffect(() => {
     const shouldHydrate =
       !panel.messagesLoaded && panel.messageCount > 0 && messages.length === 0;
-    console.log('[HYDRATION]', { shouldHydrate, messagesLoaded: panel.messagesLoaded, messageCount: panel.messageCount, messagesLen: messages.length, panelId: panel.id });
     if (!shouldHydrate) return;
     let cancelled = false;
     const hydrate = async () => {
       const resp = await fetch(`/api/panels/${panel.id}`, { cache: "no-store" }).catch(() => null);
-      console.log('[HYDRATION] fetch resp ok=', resp?.ok, 'cancelled=', cancelled);
       if (!resp?.ok || cancelled) return;
       const payload = (await resp.json().catch(() => null)) as PanelView | null;
-      console.log('[HYDRATION] payload messages=', payload?.messages?.length ?? 'null');
       if (!payload || cancelled) return;
       setMessages(payload.messages ?? []);
       if (payload.activeRunId !== undefined) setActiveRunId(payload.activeRunId);
@@ -408,18 +405,29 @@ export function TaskModePanelCard({
   useEffect(() => { panelRef.current = panel; }, [panel]);
 
   useEffect(() => {
+    const shouldPreserveHydrationSummary =
+      !panelRef.current.messagesLoaded &&
+      panelRef.current.messageCount > 0 &&
+      messages.length === 0;
+
     onPanelReplacedRef.current?.({
       ...panelRef.current,
       activeRunId,
-      messageCount: messages.length,
+      messageCount: shouldPreserveHydrationSummary
+        ? panelRef.current.messageCount
+        : messages.length,
       latestMessagePreview:
-        messages.length > 0
+        shouldPreserveHydrationSummary
+          ? panelRef.current.latestMessagePreview
+          : messages.length > 0
           ? (messages[messages.length - 1]?.text?.slice(0, 60) ?? null)
           : null,
-      messages,
+      messagesLoaded: panelRef.current.messagesLoaded || messages.length > 0,
+      messages: shouldPreserveHydrationSummary
+        ? panelRef.current.messages
+        : messages,
       groupRoles,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRunId, messages, groupRoles]);
 
   // ── Derived state ──

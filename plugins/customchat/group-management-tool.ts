@@ -79,6 +79,11 @@ const MANAGE_GROUP_TOOL_SCHEMA = {
         required: ["title", "agentId"],
       },
     },
+    groupMode: {
+      type: "string",
+      enum: ["chat", "task"],
+      description: "创建群组时的协作模式。可选，默认 chat。",
+    },
   },
   required: ["action"],
 } as const;
@@ -107,13 +112,17 @@ function normalizeAppRpcPayload(params: Record<string, unknown>) {
     case "list_groups":
       return { method: "group.list", params: {} };
     case "create_group":
-      return {
-        method: "group.create",
-        params: {
-          title: readString(params, "title"),
-          roles: Array.isArray(params.roles) ? params.roles : [],
-        },
-      };
+      return (() => {
+        const groupMode = readString(params, "groupMode");
+        return {
+          method: "group.create",
+          params: {
+            title: readString(params, "title"),
+            roles: Array.isArray(params.roles) ? params.roles : [],
+            ...(groupMode ? { groupMode } : {}),
+          },
+        };
+      })();
     case "delete_group":
       return {
         method: "group.delete",
@@ -210,6 +219,8 @@ export function registerCustomChatGroupManagementTool(api: CustomChatToolApi) {
       "Create and manage CustomChat groups and group roles in the ChatBot app. " +
       "Use this for creating or deleting groups, checking group task state, " +
       "sending a user message into a group, adding/removing roles, setting leader, or listing groups/agents. " +
+      "In task-mode groups, group plan is not used here. " +
+      "To inspect concrete tasks, use the group_task tool (list_tasks/get_task). " +
       "When identifying a role, prefer roleTitle unless you already know the real UUID-like roleId; never place a short role name such as ui into roleId.",
     parameters: MANAGE_GROUP_TOOL_SCHEMA,
     execute: async (_toolCallId, rawParams) => {

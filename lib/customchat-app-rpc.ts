@@ -30,6 +30,7 @@ import {
   updateGroupRoleMemory,
 } from "@/lib/store";
 import type {
+  GroupMode,
   GroupPlanItem,
   GroupRoleView,
   PanelView,
@@ -97,6 +98,24 @@ function readRoleInputs(params: AppRpcParams) {
     throw new Error("roles must be an array.");
   }
   return rawRoles.map((item, index) => readRoleInput(item, index));
+}
+
+function readOptionalGroupMode(params: AppRpcParams): GroupMode | undefined {
+  const raw = params.groupMode;
+  if (raw == null) {
+    return undefined;
+  }
+  if (typeof raw !== "string") {
+    throw new Error("groupMode must be 'chat' or 'task'.");
+  }
+  const mode = raw.trim();
+  if (!mode) {
+    return undefined;
+  }
+  if (mode !== "chat" && mode !== "task") {
+    throw new Error("groupMode must be 'chat' or 'task'.");
+  }
+  return mode;
 }
 
 function readPlanItems(params: AppRpcParams): GroupPlanItem[] {
@@ -222,9 +241,10 @@ async function assertKnownAgentIds(roles: GroupRoleInput[]) {
 async function handleCreateGroup(user: SessionUser, params: AppRpcParams) {
   const title = readTrimmedString(params, "title", { required: true });
   const roles = readRoleInputs(params);
+  const groupMode = readOptionalGroupMode(params);
   await assertKnownAgentIds(roles);
 
-  const panel = await createPanel(user.id, "", title, "group");
+  const panel = await createPanel(user.id, "", title, "group", groupMode);
   const createdRoles: GroupRoleView[] = [];
   for (const role of roles) {
     createdRoles.push(await createGroupRole({

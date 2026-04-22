@@ -9,16 +9,21 @@ metadata:
 
 Use this skill when the user asks you to create or delete a group, add/remove members, assign a leader, inspect available groups or agents, check a group's task state, or send a user message into a group in the ChatBot app.
 
+For task-mode groups:
+- `manage_group` is for group structure and group-level status.
+- Task-mode does not use group plan (`manage_group_plan` does not apply).
+- To inspect concrete task items, use `group_task` with `action="list_tasks"` or `action="get_task"`.
+
 ## Tool
 
 Use `manage_group` for all group management actions.
 
 ## Workflow
 
-1. If the user asks to create a group and provides all required details, call `manage_group` with `action="create_group"`, `title`, and `roles`.
+1. If the user asks to create a group and provides all required details, call `manage_group` with `action="create_group"`, `title`, and `roles`. If the user explicitly needs task-driven collaboration, also pass `groupMode="task"`; otherwise omit it (defaults to chat mode).
 2. If the user asks to add/remove/update members, delete a group, query task state, or send a message into an existing group but only gives a group name, call `manage_group` with `action="list_groups"` first when the group name may be ambiguous.
 3. If the user does not know which agentId to bind to a role, call `manage_group` with `action="list_agents"` first and then map a suitable agentId.
-4. To inspect one group's current task status and members, call `manage_group` with `action="get_group_task_state"`.
+4. To inspect one group's current task status and members, call `manage_group` with `action="get_group_task_state"` (group-level state only, not detailed task list).
 5. To make the group receive a new instruction as if it came from the user, call `manage_group` with `action="send_group_message"` and a concise message.
 6. If a required field is missing, ask one short follow-up question instead of guessing IDs or names.
 7. After the tool succeeds, answer briefly and mention the affected group name, role names, task state, or sent message as appropriate.
@@ -50,6 +55,20 @@ Create a new group with three roles:
   "roles": [
     { "title": "PM", "agentId": "main", "isLeader": true },
     { "title": "架构师", "agentId": "main" },
+    { "title": "RD", "agentId": "main" }
+  ]
+}
+```
+
+Create a task-mode group:
+
+```json
+{
+  "action": "create_group",
+  "title": "发布冲刺群",
+  "groupMode": "task",
+  "roles": [
+    { "title": "Leader", "agentId": "main", "isLeader": true },
     { "title": "RD", "agentId": "main" }
   ]
 }
