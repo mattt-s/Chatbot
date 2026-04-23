@@ -162,15 +162,18 @@ export function TaskModeConversation({
     const seen = new Set<string>();
     return messages.filter((msg) => {
       if (isBridgeDeliveryMessagePlaceholder(msg)) return false;
+      // 用 role:id 作去重 key，防止 user 消息和 assistant 消息因共用相同 id 互相屏蔽
+      // （task 模式下 messageId 可能同时作为 user 消息 id 和 agent 回复 runId）
+      const key = `${msg.role}:${msg.id}`;
       if (msg.role === "user") {
-        if (seen.has(msg.id)) return false;
-        seen.add(msg.id);
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       }
       if (msg.role === "assistant") {
         if (!msg.groupRoleId || msg.groupRoleId === leaderRoleId) {
-          if (seen.has(msg.id)) return false;
-          seen.add(msg.id);
+          if (seen.has(key)) return false;
+          seen.add(key);
           return true;
         }
       }
