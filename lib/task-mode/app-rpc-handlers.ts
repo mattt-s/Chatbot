@@ -25,12 +25,15 @@ import {
   buildReviewRequestMessage,
   buildBlockedNotificationMessage,
   buildWatchdogRetryMessage,
+  buildWatchdogAbortRetryMessage,
+  buildWatchdogSubmitReminderMessage,
 } from "@/lib/task-mode/dispatch";
 import { detectCycle } from "@/lib/task-mode/cycle-detect";
 import { taskToView } from "@/lib/task-mode/types";
 import { TASK_TERMINAL_STATUSES } from "@/lib/task-mode/types";
 import { readGroupTasks } from "@/lib/store";
 import { listGroupRoles } from "@/lib/store";
+import { abortGroupRoleRun, getRoleCurrentRunId } from "@/lib/group-router";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("task-mode:rpc");
@@ -651,6 +654,141 @@ export async function watchdogRedispatch(
 
   log.debug("watchdogRedispatch.retried", { panelId, taskId, retryCount: String(newRetryCount) });
   return { retried: true, intervention: false };
+}
+
+/**
+ * Watchdog：处理长期卡在 in_progress 的任务。
+ *
+ * 三种子场景：
+ *   A. run 仍在跑（activeRunId 非空 且匹配 busyRoles）→ abort + 重置为 assigned + 重新派发
+ *   B. run 已结束（activeRunId 非空 但不在 busyRoles）→ 发提醒，保持 in_progress
+ *   C. activeRunId 为 null（进程重启后被清空，run 状态未知）→ 不 abort，直接重置为 assigned + 重新派发
+ *
+ * watchdogRetryCount >= MAX_RETRY 时置为 needs_intervention。
+ */
+export async function watchdogCheckInProgress(
+  panelId: string,
+  taskId: string,
+): Promise<{ action: "aborted_redispatched" | "reminder_sent" | "unknown_redispatched" | "intervention" | "skipped" }> {
+  const task = await getGroupTask(panelId, taskId);
+  if (!task || task.status !== "in_progress") return { action: "skipped" };
+  if (!task.assigneeRoleId) return { action: "skipped" };
+
+  const MAX_RETRY = 2;
+  const newRetryCount = task.watchdogRetryCount + 1;
+
+  // 判断 run 状态：
+  //   activeRunId == null → 进程重启后被清空，run 状态未知（场景 C）
+  //   activeRunId != null → 检查 busyRoles 是否仍在跑
+  const currentRunId = getRoleCurrentRunId(panelId, task.assigneeRoleId);
+  const runStateUnknown = task.activeRunId == null;
+  const runStillActive = !runStateUnknown && currentRunId === task.activeRunId;
+
+  const roles = await listGroupRoles(panelId);
+  const assigneeRole = roles.find((r) => r.id === task.assigneeRoleId);
+  if (!assigneeRole) return { action: "skipped" };
+
+  // ── 先判断是否已达重试上限 ──
+  if (newRetryCount >= MAX_RETRY) {
+    await updateGroupTaskField(panelId, taskId, "watchdogRetryCount", newRetryCount);
+    await updateGroupTaskStatus(panelId, taskId, "needs_intervention", {
+      type: "needs_intervention",
+      actorRoleId: "app",
+      actorRoleTitle: "系统（watchdog）",
+      note: `in_progress 超时已重试 ${newRetryCount} 次，需要用户介入`,
+    });
+    log.error("watchdogCheckInProgress.needsIntervention", new Error("needs_intervention"), {
+      panelId,
+      taskId,
+      runStillActive: String(runStillActive),
+      runStateUnknown: String(runStateUnknown),
+    });
+    return { action: "intervention" };
+  }
+
+  await updateGroupTaskField(panelId, taskId, "watchdogRetryCount", newRetryCount);
+
+  if (runStillActive) {
+    // ── 场景 A：run 确认在跑且超时，abort 后重新派发 ──
+    await abortGroupRoleRun(panelId, task.assigneeRoleId).catch(() => null);
+
+    await updateGroupTaskStatus(panelId, taskId, "assigned", {
+      type: "watchdog_in_progress_retry",
+      actorRoleId: "app",
+      actorRoleTitle: "系统（watchdog）",
+      note: `第 ${newRetryCount} 次重试：运行超时已中止，重新派发`,
+    });
+
+    await dispatchTaskMessage({
+      panelId,
+      roleId: assigneeRole.id,
+      agentId: assigneeRole.agentId,
+      text: buildWatchdogAbortRetryMessage(task, newRetryCount),
+      taskId,
+      isLeader: assigneeRole.isLeader === true,
+      roleTitle: assigneeRole.title,
+    });
+
+    log.debug("watchdogCheckInProgress.abortedRedispatched", {
+      panelId,
+      taskId,
+      retryCount: String(newRetryCount),
+    });
+    return { action: "aborted_redispatched" };
+
+  } else if (runStateUnknown) {
+    // ── 场景 C：进程重启后 activeRunId 被清空，run 状态未知 ──
+    // 无法 abort（busyRoles 为空），直接重置为 assigned 重新派发
+    await updateGroupTaskStatus(panelId, taskId, "assigned", {
+      type: "watchdog_in_progress_retry",
+      actorRoleId: "app",
+      actorRoleTitle: "系统（watchdog）",
+      note: `第 ${newRetryCount} 次重试：进程重启后 run 状态未知，重新派发`,
+    });
+
+    await dispatchTaskMessage({
+      panelId,
+      roleId: assigneeRole.id,
+      agentId: assigneeRole.agentId,
+      text: buildWatchdogAbortRetryMessage(task, newRetryCount),
+      taskId,
+      isLeader: assigneeRole.isLeader === true,
+      roleTitle: assigneeRole.title,
+    });
+
+    log.debug("watchdogCheckInProgress.unknownRedispatched", {
+      panelId,
+      taskId,
+      retryCount: String(newRetryCount),
+    });
+    return { action: "unknown_redispatched" };
+
+  } else {
+    // ── 场景 B：activeRunId 有值但 run 已结束，assignee 未调 submit_task ──
+    await appendTaskEvent(panelId, taskId, {
+      type: "watchdog_in_progress_retry",
+      actorRoleId: "app",
+      actorRoleTitle: "系统（watchdog）",
+      note: `第 ${newRetryCount} 次提醒：运行已结束但任务未提交`,
+    });
+
+    await dispatchTaskMessage({
+      panelId,
+      roleId: assigneeRole.id,
+      agentId: assigneeRole.agentId,
+      text: buildWatchdogSubmitReminderMessage(task, newRetryCount),
+      taskId,
+      isLeader: assigneeRole.isLeader === true,
+      roleTitle: assigneeRole.title,
+    });
+
+    log.debug("watchdogCheckInProgress.reminderSent", {
+      panelId,
+      taskId,
+      retryCount: String(newRetryCount),
+    });
+    return { action: "reminder_sent" };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────

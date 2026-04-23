@@ -135,6 +135,36 @@ export function buildReviewRequestMessage(task: StoredGroupTask): string {
   ].join("\n");
 }
 
+/**
+ * Watchdog：运行超时被中止，重新发完整任务（状态已重置为 assigned）。
+ */
+export function buildWatchdogAbortRetryMessage(
+  task: StoredGroupTask,
+  retryCount: number,
+): string {
+  return [
+    `[任务重新分配-超时中止 #${retryCount}] #${task.id.slice(0, 8)} ${task.title}`,
+    `注意：上次运行超过 10 分钟未完成，已被系统中止并重新分配。`,
+    `描述：${task.description}`,
+    `请调用 group_task(action="start_task", taskId="${task.id}") 认领，完成后调用 group_task(action="submit_task", taskId="${task.id}", note=...) 提交。`,
+  ].join("\n");
+}
+
+/**
+ * Watchdog：运行已结束但任务未提交，发提醒（任务仍为 in_progress）。
+ */
+export function buildWatchdogSubmitReminderMessage(
+  task: StoredGroupTask,
+  retryCount: number,
+): string {
+  return [
+    `[任务提交提醒 #${retryCount}] #${task.id.slice(0, 8)} ${task.title}`,
+    `注意：你的上次运行已结束，但任务尚未提交，请尽快完成并提交。`,
+    `如任务已完成，请调用 group_task(action="submit_task", taskId="${task.id}", note=...) 提交。`,
+    `如遇到阻塞，请调用 group_task(action="block_on", taskId="${task.id}", dependsOnTaskId=...) 声明依赖。`,
+  ].join("\n");
+}
+
 export function buildBlockedNotificationMessage(
   task: StoredGroupTask,
   dependsOnTaskTitle: string,

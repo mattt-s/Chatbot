@@ -416,13 +416,18 @@ assignee submit_task
 
 **2. 时间兜底检测**（防御极端情况）
 
-针对 run 完全未启动、消息被丢弃、agent 彻底无响应等极端情况，app 运行一个**任务模式专属的 watchdog 定时器**（独立于聊天模式的 watchdog）：
+针对 run 完全未启动、消息被丢弃、agent 彻底无响应等极端情况，app 运行一个**任务模式专属的 watchdog 定时器**（独立于聊天模式的 watchdog），每 60 秒双轨扫描：
 
-- 定期扫描所有 `status=assigned` 且有 `lastDispatchAt` 的任务
-- 如果 `lastDispatchAt` 距今超过 **5 分钟** 仍未转入 `in_progress`，视同"无响应"，走同样的重试流程
-- 同一任务在一个扫描周期内只触发一次（用 `lastDispatchAt` 更新时间去重）
+**轨道一：assigned 超时**
+- 扫描所有 `status=assigned` 且有 `lastDispatchAt` 的任务
+- 如果 `lastDispatchAt` 距今超过 **5 分钟** 仍未转入 `in_progress`，视同"无响应"，走重试流程（`watchdogRedispatch`）
 
-两类检测共用计数器 `watchdogRetryCount` 和重试流程。
+**轨道二：in_progress 超时**
+- 扫描所有 `status=in_progress` 且有 `lastDispatchAt` 的任务
+- 如果 `lastDispatchAt` 距今超过 **10 分钟** 仍未 `submit_task`，触发 `watchdogCheckInProgress`
+- 通过 `getRoleCurrentRunId` 判断 run 是否仍在 busyRoles 中执行，区分两种子场景（见"in_progress 超时处理"章节）
+
+两条轨道共用计数器 `watchdogRetryCount` 和 `needs_intervention` 终止逻辑。
 
 ### 重试流程
 
@@ -448,9 +453,56 @@ assignee submit_task
 
 > 注意：`cancelled` 是独立终态，语义是"此任务永久终止，不再继续推进"，与 `rejected`（"退回重做"）完全不同。两者绝不能互用。
 
-### in_progress 状态下的卡死
+### in_progress 状态下的超时处理
 
-`in_progress` 表示 assignee 已经 `start_task`，但迟迟不 `submit_task`。这种情况 watchdog 不自动处理（执行时间可长可短），由用户在前端观察后手动介入。
+`in_progress` 表示 assignee 已经 `start_task`，但迟迟不 `submit_task`。任务复杂度不同，执行时间可长可短，因此不能简单判断"卡死"。但以下两种情况可以通过 watchdog 自动干预：
+
+**触发条件**：`status=in_progress` 且 `lastDispatchAt` 距今超过 **10 分钟**，watchdog 每 60 秒扫描一次。
+
+**三种子场景：**
+
+**场景 A：run 仍在执行中（确认卡住）**
+
+`task.activeRunId` 非空，且 `getRoleCurrentRunId(panelId, roleId)` 返回的 busyRoles 当前 runId 与之匹配，说明 Gateway run 尚未结束：
+
+```
+1. 调用 abortGroupRoleRun(panelId, assigneeRoleId) 中止当前 run
+2. task.status = assigned（重置为未认领，让 assignee 重新认领）
+3. 写入 watchdog_in_progress_retry 事件，note="运行超时已中止，重新派发"
+4. task.watchdogRetryCount += 1
+5. 若 watchdogRetryCount < MAX_RETRY(2) → 重新 dispatch 完整任务消息（含"已中止重新分配"提示）
+6. 若 watchdogRetryCount >= MAX_RETRY → task.status = needs_intervention
+```
+
+**场景 B：run 已结束，但 assignee 未调 submit_task**
+
+`task.activeRunId` 非空，但 busyRoles 中该角色的 runId 已与之不匹配（run 已结束），任务还停在 `in_progress`：
+
+```
+1. 不发 abort（run 已结束）
+2. 保持 task.status = in_progress
+3. 写入 watchdog_in_progress_retry 事件，note="运行已结束但任务未提交，发送提醒"
+4. task.watchdogRetryCount += 1
+5. 若 watchdogRetryCount < MAX_RETRY(2) → 发送提醒消息："任务还未提交，请调用 submit_task"
+6. 若 watchdogRetryCount >= MAX_RETRY → task.status = needs_intervention
+```
+
+**场景 C：进程重启后 activeRunId 被清空，run 状态未知**
+
+`instrumentation.ts` 重启时调用 `clearAllActiveRunIds` 将所有任务的 `activeRunId` 置 null，同时 `busyRoles`（纯内存）也随之丢失。此时无法判断 Gateway 上的 run 是否仍在执行：
+
+```
+1. 不发 abort（busyRoles 为空，abortGroupRoleRun 无法找到目标）
+2. task.status = assigned（直接重置，重新派发完整任务消息）
+3. 写入 watchdog_in_progress_retry 事件，note="进程重启后 run 状态未知，重新派发"
+4. task.watchdogRetryCount += 1
+5. 若 watchdogRetryCount < MAX_RETRY(2) → dispatch 完整任务消息
+6. 若 watchdogRetryCount >= MAX_RETRY → task.status = needs_intervention
+```
+
+> ⚠️ 场景 C 不发 abort 的原因：若 Gateway run 仍在跑，app 重启后已无该 run 的内存句柄，调用 abort 只会空转（`abortGroupRoleRun` 检查 `busyRoles` 为空直接返回 idle）。直接重新派发虽然可能短暂与旧 run 并行，但旧 run 的 textOutput 会通过 `activeRunId` 匹配失败被忽略，不影响任务结果。
+
+三种场景共用 `watchdogRetryCount` 计数器（与 `assigned` 阶段的 watchdog 共用同一字段）。到达上限后走标准 `needs_intervention` 流程。
 
 ---
 
@@ -650,7 +702,7 @@ assignee submit_task
 | `lib/task-mode/store.ts` | 任务 CRUD、事件 append、pending dispatch 队列、群级状态派生；面板删除时清理；角色删除前未完成任务检查 |
 | `lib/task-mode/app-rpc-handlers.ts` | `group_task.*` 所有 RPC handler：状态机转换、依赖触发、同 assignee 串行化、循环检测、autoApprove 权限约束 |
 | `lib/task-mode/ingest.ts` | 任务模式独立 ingest：`state=final` 不走聊天路由；文本追加到 `task.textOutputs`；检测无响应触发 watchdog 重试 |
-| `lib/task-mode/watchdog.ts` | 任务模式专属 watchdog 定时器（独立于聊天模式 watchdog）：5 分钟兜底扫描 + 重试 + `needs_intervention` |
+| `lib/task-mode/watchdog.ts` | 任务模式专属 watchdog 定时器（独立于聊天模式 watchdog）：双轨扫描：① assigned 超时 5 分钟重试；② in_progress 超时 10 分钟区分"run 仍在跑"vs"run 已结束未提交"分别 abort+重派/发提醒；达到 MAX_RETRY 置为 `needs_intervention` |
 | `lib/task-mode/dispatch.ts` | 任务 dispatch 消息构造（分配 / 退回 / 验收请求 / 阻塞通知）及对 Gateway 的推送封装 |
 | `lib/task-mode/cycle-detect.ts` | 循环依赖检测（DFS），仅在 `add_dependency` / `block_on` 时调用 |
 | `lib/task-mode/sse.ts` | 任务模式独立 SSE 推送：任务列表变更、textOutputs 变更 |
@@ -855,14 +907,17 @@ app 进程重启后，持久化到 `app-data.json` 的任务数据（status、la
 
 | 功能点 | 状态 | 备注 |
 |---|---|---|
-| 任务模式专属 watchdog 定时器（每 60 秒扫描） | ✅ | `lib/task-mode/watchdog.ts` |
-| 5 分钟兜底：`lastDispatchAt` 超时触发重试 | ✅ | `scanAndRetry` |
-| 重试计数 + 达到 MAX_RETRY(2) 置为 `needs_intervention` | ✅ | `watchdogRedispatch` |
+| 任务模式专属 watchdog 定时器（每 60 秒双轨扫描） | ✅ | `lib/task-mode/watchdog.ts` |
+| `assigned` 超时 5 分钟：`scanAndRetry` 重新 dispatch | ✅ | `scanAndRetry` → `watchdogRedispatch` |
+| `in_progress` 超时 10 分钟（场景 A）：run 仍在跑 → abort + 重置 assigned + 重派 | ✅ | `scanInProgress` → `watchdogCheckInProgress` |
+| `in_progress` 超时 10 分钟（场景 B）：run 已结束未提交 → 发提醒，保持 in_progress | ✅ | `scanInProgress` → `watchdogCheckInProgress` |
+| `in_progress` 超时 10 分钟（场景 C）：重启后 activeRunId=null → 不 abort，直接重置 assigned + 重派 | ✅ | `scanInProgress` → `watchdogCheckInProgress` |
+| 重试计数 + 达到 MAX_RETRY(2) 置为 `needs_intervention` | ✅ | `watchdogRedispatch` / `watchdogCheckInProgress` |
 | `instrumentation.ts` 启动钩子（重建队列 + 清 activeRunId + 启动 watchdog） | ✅ | `instrumentation.ts` |
 | 用户介入 API（`POST /group-tasks/[taskId]`：cancel / redispatch / reset_watchdog） | ✅ | |
 | 用户介入 UI（任务详情里的"重新分配"和"取消任务"按钮） | ✅ | `task-mode-board.tsx` |
 | **改派（修改 assignee 后重新 dispatch）** | ❌ | 介入 API 只支持原 assignee 重新 dispatch，未实现改派给其他角色 |
-| `in_progress` 卡死的人工介入提示 | ⚠️ | 有取消按钮，但没有专门针对"执行中超时"的前端提示 |
+| `in_progress` 超时前端专属提示 | ⚠️ | 后端 watchdog 已处理，前端无"执行中超时"的独立视觉提示 |
 
 ### 七、前端 UI
 

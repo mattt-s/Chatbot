@@ -52,6 +52,7 @@ export type GroupTaskEventType =
   | "blocked"
   | "dependency_added"
   | "watchdog_redispatched"
+  | "watchdog_in_progress_retry"
   | "needs_intervention"
   | "cancelled"
   | "comment";

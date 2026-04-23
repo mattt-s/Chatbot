@@ -1,20 +1,22 @@
 /**
  * @module task-mode/watchdog
  * 任务模式专属 watchdog 定时器。
- * 每 60 秒扫描一次所有 status=assigned 且 lastDispatchAt 超过 5 分钟的任务，
- * 触发 watchdog 重试或置为 needs_intervention。
+ * 每 60 秒双轨扫描：
+ *   - assigned 超时 5 分钟：重新 dispatch 或置为 needs_intervention
+ *   - in_progress 超时 10 分钟：abort/提醒后重试，或置为 needs_intervention
  * 独立于聊天模式的 watchdog，不共享任何状态。
  */
 import "server-only";
 
 import { readGroupTasks } from "@/lib/store";
 import { createLogger } from "@/lib/logger";
-import { watchdogRedispatch } from "@/lib/task-mode/app-rpc-handlers";
+import { watchdogRedispatch, watchdogCheckInProgress } from "@/lib/task-mode/app-rpc-handlers";
 
 const log = createLogger("task-mode:watchdog");
 
-const DISPATCH_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟
-const SCAN_INTERVAL_MS = 60 * 1000;         // 每 60 秒扫描一次
+const ASSIGNED_TIMEOUT_MS = 5 * 60 * 1000;    // assigned 超时：5 分钟
+const IN_PROGRESS_TIMEOUT_MS = 10 * 60 * 1000; // in_progress 超时：10 分钟
+const SCAN_INTERVAL_MS = 60 * 1000;             // 每 60 秒扫描一次
 
 let watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -26,9 +28,10 @@ export function startTaskModeWatchdog() {
   if (watchdogTimer !== null) return;
 
   watchdogTimer = setInterval(() => {
-    void scanAndRetry().catch((err) => {
-      log.error("watchdog.scan", err);
-    });
+    void Promise.all([
+      scanAndRetry().catch((err) => log.error("watchdog.scanAssigned", err)),
+      scanInProgress().catch((err) => log.error("watchdog.scanInProgress", err)),
+    ]);
   }, SCAN_INTERVAL_MS);
 
   log.debug("startTaskModeWatchdog", { intervalMs: String(SCAN_INTERVAL_MS) });
@@ -58,7 +61,7 @@ async function scanAndRetry() {
       (t) =>
         t.status === "assigned" &&
         t.lastDispatchAt &&
-        now - new Date(t.lastDispatchAt).getTime() > DISPATCH_TIMEOUT_MS,
+        now - new Date(t.lastDispatchAt).getTime() > ASSIGNED_TIMEOUT_MS,
     );
 
     for (const task of stale) {
@@ -70,6 +73,51 @@ async function scanAndRetry() {
 
       void watchdogRedispatch(panelId, task.id).catch((err) => {
         log.error("watchdog.redispatch", err, { panelId, taskId: task.id });
+      });
+    }
+  }
+}
+
+/**
+ * 扫描所有 status=in_progress 且 lastDispatchAt 超过 10 分钟的任务。
+ * 区分"run 仍在跑"和"run 已结束但未提交"两种场景分别处理。
+ */
+async function scanInProgress() {
+  const { readAllGroupTasks } = await import("@/lib/store");
+  const allTasks = await readAllGroupTasks();
+  const now = Date.now();
+
+  const stalePanelIds = new Set(
+    allTasks
+      .filter(
+        (t) =>
+          t.status === "in_progress" &&
+          t.lastDispatchAt &&
+          now - new Date(t.lastDispatchAt).getTime() > IN_PROGRESS_TIMEOUT_MS,
+      )
+      .map((t) => t.panelId),
+  );
+
+  for (const panelId of stalePanelIds) {
+    const tasks = await readGroupTasks(panelId);
+
+    const stale = tasks.filter(
+      (t) =>
+        t.status === "in_progress" &&
+        t.lastDispatchAt &&
+        now - new Date(t.lastDispatchAt).getTime() > IN_PROGRESS_TIMEOUT_MS,
+    );
+
+    for (const task of stale) {
+      log.debug("watchdog.staleInProgress", {
+        panelId,
+        taskId: task.id,
+        lastDispatchAt: task.lastDispatchAt ?? "none",
+        activeRunId: task.activeRunId ?? "none",
+      });
+
+      void watchdogCheckInProgress(panelId, task.id).catch((err) => {
+        log.error("watchdog.checkInProgress", err, { panelId, taskId: task.id });
       });
     }
   }

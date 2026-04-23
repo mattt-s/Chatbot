@@ -151,6 +151,11 @@ function isRoleBusy(panelId: string, groupRoleId: string): boolean {
   return busyRoles.has(`${panelId}:${groupRoleId}`);
 }
 
+/** 返回角色当前正在执行的 runId，若角色空闲则返回 null */
+export function getRoleCurrentRunId(panelId: string, groupRoleId: string): string | null {
+  return busyRoles.get(`${panelId}:${groupRoleId}`)?.runId ?? null;
+}
+
 function markRoleBusy(panelId: string, groupRoleId: string, runId: string, agentId: string) {
   busyRoles.set(`${panelId}:${groupRoleId}`, {
     runId,
