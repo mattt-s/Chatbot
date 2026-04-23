@@ -8,6 +8,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -25,21 +26,41 @@ function fmtTime(iso: string) {
   });
 }
 
-function MessageBubble({ message }: { message: MessageView }) {
+function MessageBubble({
+  message,
+  leaderAvatarUrl,
+  avatarFailed,
+  onAvatarError,
+}: {
+  message: MessageView;
+  leaderAvatarUrl?: string | null;
+  avatarFailed: boolean;
+  onAvatarError: () => void;
+}) {
   const isUser = message.role === "user";
+  const initial = (message.senderLabel?.[0]?.toUpperCase() ?? "L");
 
   return (
-    <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+    <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"} items-end`}>
       {/* Avatar */}
       <div
-        className={[
-          "mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-[11px] font-semibold",
-          isUser
-            ? "bg-[var(--ink)] text-white"
-            : "bg-[var(--paper-2)] text-[var(--ink)] border border-black/8",
-        ].join(" ")}
+        className="mt-0.5 h-8 w-8 shrink-0 rounded-full overflow-hidden flex items-center justify-center text-[11px] font-semibold border border-black/8 bg-white shadow-sm relative"
       >
-        {isUser ? "我" : (message.senderLabel?.[0]?.toUpperCase() ?? "L")}
+        {isUser ? (
+          <span className="text-[var(--ink-soft)]">我</span>
+        ) : leaderAvatarUrl && !avatarFailed ? (
+          <Image
+            src={leaderAvatarUrl}
+            alt={message.senderLabel ?? "Leader"}
+            fill
+            unoptimized
+            sizes="32px"
+            className="object-cover"
+            onError={onAvatarError}
+          />
+        ) : (
+          <span className="text-xs font-semibold text-[var(--ink-soft)]">{initial}</span>
+        )}
       </div>
 
       <div
@@ -50,13 +71,13 @@ function MessageBubble({ message }: { message: MessageView }) {
           <span className="text-[11px] text-[var(--ink-soft)]">{message.senderLabel}</span>
         )}
 
-        {/* Bubble */}
+        {/* Bubble — 与单聊保持一致 */}
         <div
           className={[
-            "rounded-2xl px-3 py-2 text-sm leading-relaxed",
+            "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm",
             isUser
-              ? "rounded-tr-sm bg-[var(--ink)] text-white"
-              : "rounded-tl-sm bg-[var(--paper-2)] text-[var(--ink)]",
+              ? "rounded-br-sm bg-[#95ec69] text-[var(--ink)]"
+              : "rounded-bl-sm bg-white border border-black/8 text-[var(--ink)]",
           ].join(" ")}
         >
           {/* Typing indicator */}
@@ -71,13 +92,7 @@ function MessageBubble({ message }: { message: MessageView }) {
               ))}
             </span>
           ) : (
-            <div
-              className={[
-                "prose prose-sm max-w-none break-words",
-                "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-                isUser ? "prose-invert" : "",
-              ].join(" ")}
-            >
+            <div className="prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {message.text}
               </ReactMarkdown>
@@ -105,10 +120,11 @@ export interface TaskModeConversationProps {
   messages: MessageView[];
   /** leader 角色 ID，用于过滤只展示 leader 消息 */
   leaderRoleId: string | null;
+  /** leader 头像 URL，用于展示头像图片 */
+  leaderAvatarUrl?: string | null;
   isRunActive: boolean;
   isSending: boolean;
   errorMessage: string | null;
-  streamStatus: "connecting" | "connected" | "closed";
   onSend: (text: string) => Promise<void>;
   onClearError: () => void;
 }
@@ -120,23 +136,31 @@ export interface TaskModeConversationProps {
 export function TaskModeConversation({
   messages,
   leaderRoleId,
+  leaderAvatarUrl,
   isRunActive,
   isSending,
   errorMessage,
-  streamStatus,
   onSend,
   onClearError,
 }: TaskModeConversationProps) {
   const [draft, setDraft] = useState("");
+  const [leaderAvatarFailed, setLeaderAvatarFailed] = useState(false);
+  // 切换面板时重置头像失败状态 & 初始滚动标记
+  useEffect(() => {
+    setLeaderAvatarFailed(false);
+    initialScrollDoneRef.current = false;
+    prevLenRef.current = 0;
+  }, [leaderRoleId]);
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const prevLenRef = useRef(0);
+  // 首次加载完成后才允许 smooth 滚动；避免初始化时一条条 smooth 滚动的视觉刷屏
+  const initialScrollDoneRef = useRef(false);
 
   // ── 消息过滤：只展示用户和 leader ──
   const visibleMessages = (() => {
     const seen = new Set<string>();
     return messages.filter((msg) => {
-      // 过滤空壳消息（bridge delivery 噪音）
       if (isBridgeDeliveryMessagePlaceholder(msg)) return false;
       if (msg.role === "user") {
         if (seen.has(msg.id)) return false;
@@ -144,7 +168,6 @@ export function TaskModeConversation({
         return true;
       }
       if (msg.role === "assistant") {
-        // 无 groupRoleId（直接对话），或 groupRoleId 匹配 leader
         if (!msg.groupRoleId || msg.groupRoleId === leaderRoleId) {
           if (seen.has(msg.id)) return false;
           seen.add(msg.id);
@@ -155,12 +178,20 @@ export function TaskModeConversation({
     });
   })();
 
-  // 新消息到来时滚动到底部
+  // 消息变化时滚动到底部
+  // - 首次加载（initialScrollDoneRef=false）：instant，直接跳底部
+  // - 后续新消息：smooth，平滑滚动
   useEffect(() => {
-    if (visibleMessages.length !== prevLenRef.current) {
-      prevLenRef.current = visibleMessages.length;
-      const list = listRef.current;
-      if (list) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+    if (visibleMessages.length === prevLenRef.current) return;
+    prevLenRef.current = visibleMessages.length;
+    const list = listRef.current;
+    if (!list) return;
+    if (!initialScrollDoneRef.current) {
+      // 初始批量加载：直接跳到底部，无动画
+      list.scrollTop = list.scrollHeight;
+      initialScrollDoneRef.current = true;
+    } else {
+      list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
     }
   }, [visibleMessages.length]);
 
@@ -180,32 +211,17 @@ export function TaskModeConversation({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // 拼音输入法合成中（isComposing）时按 Enter 不发送，与单聊保持一致
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void handleSend();
     }
   }
 
-  const statusDotCls =
-    streamStatus === "connected"
-      ? "bg-emerald-500"
-      : streamStatus === "connecting"
-        ? "bg-amber-400 animate-pulse"
-        : "bg-red-400";
-
   const canSend = Boolean(draft.trim()) && !isSending && !isRunActive;
 
   return (
     <div className="flex h-full flex-col">
-      {/* 顶部状态栏 */}
-      <div className="shrink-0 flex items-center gap-1.5 border-b border-black/8 px-4 py-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full ${statusDotCls}`} />
-        <span className="text-[11px] text-[var(--ink-soft)]">用户 ↔ Leader 对话</span>
-        {isRunActive && (
-          <span className="ml-auto text-[11px] text-[var(--ink-soft)]">处理中…</span>
-        )}
-      </div>
-
       {/* 消息列表 */}
       <div
         ref={listRef}
@@ -214,11 +230,17 @@ export function TaskModeConversation({
         {visibleMessages.length === 0 && !isRunActive && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--ink-soft)]">
             <span className="text-2xl">💬</span>
-            <span className="text-sm">向 Leader 下达目标或指令</span>
+            <span className="text-sm">与 Leader 交流</span>
           </div>
         )}
         {visibleMessages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            leaderAvatarUrl={leaderAvatarUrl}
+            avatarFailed={leaderAvatarFailed}
+            onAvatarError={() => setLeaderAvatarFailed(true)}
+          />
         ))}
       </div>
 
@@ -236,49 +258,50 @@ export function TaskModeConversation({
         </div>
       )}
 
-      {/* 输入框 */}
-      <div className="shrink-0 border-t border-black/8 px-3 py-2.5">
-        <div className="flex items-end gap-2">
+      {/* 输入框 — 与单聊保持一致：卡片容器 + 发送按钮内嵌右下角 */}
+      <div className="shrink-0 border-t border-black/8 p-3">
+        <div className="relative rounded-2xl border border-black/10 bg-[var(--paper)] transition focus-within:border-[var(--accent)]">
           <textarea
             ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={
-              isRunActive
-                ? "Leader 正在处理，请稍候…"
-                : "向 Leader 发送指令（Enter 发送，Shift+Enter 换行）"
-            }
-            disabled={isSending}
+            placeholder={isRunActive ? "Leader 处理中…" : "与 Leader 交流"}
+            disabled={isSending || isRunActive}
             rows={1}
             className={[
-              "flex-1 resize-none rounded-2xl border border-black/10 bg-[var(--paper)]",
-              "px-3 py-2 text-sm text-[var(--ink)] outline-none transition",
-              "placeholder:text-[var(--ink-soft)] focus:border-[var(--accent)]",
-              "disabled:opacity-60",
+              "w-full resize-none bg-transparent px-3.5 pb-10 pt-2.5",
+              "text-sm text-[var(--ink)] outline-none",
+              "placeholder:text-xs placeholder:text-[var(--ink-soft)]",
+              "disabled:cursor-not-allowed disabled:opacity-50",
             ].join(" ")}
             style={{ maxHeight: "120px" }}
           />
-          <button
-            type="button"
-            onClick={() => void handleSend()}
-            disabled={!canSend}
-            aria-label="发送"
-            className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:opacity-90 disabled:opacity-40"
-          >
-            {/* Up arrow icon */}
-            <svg
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {/* 右下角操作区 */}
+          <div className="absolute bottom-2 right-2 flex items-center gap-2">
+            {isRunActive && (
+              <span className="text-[10px] text-[var(--ink-soft)]">处理中…</span>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleSend()}
+              disabled={!canSend}
+              aria-label="发送"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:opacity-90 disabled:opacity-40"
             >
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>

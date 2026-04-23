@@ -124,6 +124,8 @@ export function TaskModePanelCard({
   // Derive leader role from current groupRoles
   const leaderRole = groupRoles.find((r) => r.isLeader && r.enabled) ?? null;
   const leaderRoleId = leaderRole?.id ?? null;
+  const leaderAgent = leaderRole ? agents.find((a) => a.id === leaderRole.agentId) ?? null : null;
+  const leaderAvatarUrl = leaderAgent ? `/api/agents/${leaderAgent.id}/avatar` : null;
   useEffect(() => { leaderRoleIdRef.current = leaderRoleId; }, [leaderRoleId]);
 
   // ── Message hydration（初始加载不含消息，mount 后补全）──
@@ -273,6 +275,11 @@ export function TaskModePanelCard({
 
     source.addEventListener("hello", () => setStreamStatus("connected"));
 
+    // 任务变更通知（由 panel stream 统一推送，避免额外 SSE 连接）
+    source.addEventListener("tasks_updated", () => {
+      void fetchTasks();
+    });
+
     source.addEventListener("chat", (e: MessageEvent<string>) => {
       const payload = JSON.parse(e.data) as ChatEventPayload;
 
@@ -329,22 +336,7 @@ export function TaskModePanelCard({
     return () => source.close();
   }, [panel.id, panel.kind, panel.sessionKey]);
 
-  // ── Tasks SSE subscription（看板：任意任务变更即推送）──
-
-  useEffect(() => {
-    const source = new EventSource(`/api/panels/${panel.id}/group-tasks/stream`);
-
-    source.addEventListener("tasks_updated", () => {
-      void fetchTasks();
-    });
-
-    // 连接断开后自动重连（浏览器 EventSource 默认会重连，此处仅标记状态）
-    source.onerror = () => {
-      // 不改变 streamStatus（那是 chat SSE 的状态），静默重连即可
-    };
-
-    return () => source.close();
-  }, [panel.id, fetchTasks]);
+  // tasks_updated 事件已合并进主 panel stream，无需独立的 group-tasks/stream 连接
 
   // ── Send message ──
 
@@ -464,12 +456,23 @@ export function TaskModePanelCard({
             </svg>
           </button>
 
-          {/* 标题 + 模式徽标 */}
+          {/* 标题 + 模式徽标 + 连接状态点 */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-[var(--ink)]">{panel.title}</span>
             <span className="rounded-full border border-black/10 bg-[var(--paper-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--ink-soft)]">
               🗂 任务模式
             </span>
+            {/* SSE 连接状态 — 与 chat 面板头部保持一致 */}
+            <span
+              className={[
+                "h-2.5 w-2.5 shrink-0 rounded-full",
+                streamStatus === "connected"
+                  ? "bg-emerald-500"
+                  : streamStatus === "connecting"
+                    ? "bg-amber-400 animate-pulse"
+                    : "bg-red-400",
+              ].join(" ")}
+            />
           </div>
 
           {/* 右侧操作区 */}
@@ -595,10 +598,10 @@ export function TaskModePanelCard({
           <TaskModeConversation
             messages={messages}
             leaderRoleId={leaderRoleId}
+            leaderAvatarUrl={leaderAvatarUrl}
             isRunActive={isRunActive}
             isSending={isSending}
             errorMessage={errorMessage}
-            streamStatus={streamStatus}
             onSend={handleSend}
             onClearError={() => setErrorMessage(null)}
           />

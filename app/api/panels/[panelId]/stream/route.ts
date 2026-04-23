@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { ensureCustomChatBridgeServer } from "@/lib/customchat-bridge-server";
 import { subscribeCustomChatEvent } from "@/lib/customchat-events";
+import { subscribeGroupTasksUpdate } from "@/lib/task-mode/sse";
 import {
   getPanelRecordForUser,
   setPanelActiveRun,
@@ -111,6 +112,7 @@ export async function GET(_request: Request, context: RouteContext) {
   const encoder = new TextEncoder();
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let unsubscribeChat: (() => void) | null = null;
+  let unsubscribeTasks: (() => void) | null = null;
   let closed = false;
 
   const stream = new ReadableStream<Uint8Array>({
@@ -141,6 +143,12 @@ export async function GET(_request: Request, context: RouteContext) {
         });
       });
 
+      // 任务看板变更通知（合并进主 stream，避免额外的 SSE 连接）
+      unsubscribeTasks = subscribeGroupTasksUpdate((updatedPanelId) => {
+        if (updatedPanelId !== panel.id) return;
+        push("tasks_updated", { panelId: panel.id });
+      });
+
       heartbeatTimer = globalThis.setInterval(() => {
         controller.enqueue(encoder.encode(": ping\n\n"));
       }, 15_000);
@@ -154,6 +162,10 @@ export async function GET(_request: Request, context: RouteContext) {
       if (unsubscribeChat) {
         unsubscribeChat();
         unsubscribeChat = null;
+      }
+      if (unsubscribeTasks) {
+        unsubscribeTasks();
+        unsubscribeTasks = null;
       }
       return undefined;
     },

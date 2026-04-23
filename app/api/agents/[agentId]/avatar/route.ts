@@ -37,11 +37,16 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   try {
-    const result = await sendRpcToPlugin<{
+    // 5 秒内没有响应则快速失败，避免 30 秒 ack 超时阻塞浏览器
+    const rpcPromise = sendRpcToPlugin<{
       ok?: boolean;
       mimeType?: string;
       base64?: string;
     }>("agent.avatar", { agentId });
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("avatar rpc timeout")), 5_000),
+    );
+    const result = await Promise.race([rpcPromise, timeoutPromise]);
 
     if (!result?.base64) {
       return NextResponse.json({ error: "Avatar not found." }, { status: 404 });
