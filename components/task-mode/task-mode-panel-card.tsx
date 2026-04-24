@@ -382,7 +382,13 @@ export function TaskModePanelCard({
         );
       }
 
-      if (data?.runId) setActiveRunId((data.runId as string).trim() || null);
+      if (data?.runId) {
+        setActiveRunId((data.runId as string).trim() || null);
+      } else if (resp.ok) {
+        // task mode: webhook 返回 runId:null，用 messageId 占位，保持 isRunActive=true
+        // 避免 isSending 归零后按钮重新可点击，直到 SSE delta 到达覆盖真实 runId
+        setActiveRunId(messageId);
+      }
       setIsSending(false);
     },
     [isSending, panel.id],

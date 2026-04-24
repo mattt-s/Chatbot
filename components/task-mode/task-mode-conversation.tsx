@@ -270,39 +270,23 @@ export function TaskModeConversation({
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={isRunActive ? "Leader 处理中…" : "与 Leader 交流"}
-            disabled={isSending || isRunActive}
             rows={1}
             className={[
               "w-full resize-none bg-transparent px-3.5 pb-10 pt-2.5",
               "text-sm text-[var(--ink)] outline-none",
               "placeholder:text-xs placeholder:text-[var(--ink-soft)]",
-              "disabled:cursor-not-allowed disabled:opacity-50",
             ].join(" ")}
             style={{ maxHeight: "120px" }}
           />
           {/* 右下角操作区 */}
           <div className="absolute bottom-2 right-2 flex items-center gap-2">
-            {isRunActive && (
-              <span className="text-[10px] text-[var(--ink-soft)]">处理中…</span>
-            )}
             <button
               type="button"
               onClick={() => void handleSend()}
               disabled={!canSend}
-              aria-label="发送"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:opacity-90 disabled:opacity-40"
+              className="rounded-full bg-[var(--ink)] px-4 py-1.5 text-xs font-semibold text-[var(--paper)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-3.5 w-3.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 19V5M5 12l7-7 7 7" />
-              </svg>
+              {isSending ? "发送中..." : isRunActive ? "推理中..." : "发送"}
             </button>
           </div>
         </div>
