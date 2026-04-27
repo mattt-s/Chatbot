@@ -986,3 +986,115 @@ app 进程重启后，持久化到 `app-data.json` 的任务数据（status、la
 | P3 | `task-mode-task-card.tsx` 独立组件文件 | 从 board.tsx 中拆出 |
 | 后期 | 任务依赖图可视化 | `task-mode-dependency-graph.tsx`，节点 + 连线，颜色对应状态 |
 
+---
+
+## 升级迭代
+
+> 以下为运行效果优化项，主要针对任务粒度过大、验收链路过重等实际问题，优先级独立于"未实现功能"列表。
+
+| # | 方向 | 具体内容 | 涉及文件 | 进度 |
+|---|---|---|---|---|
+| 1 | Leader 提示词：加颗粒度判断标准 | 补充明确尺度：单任务 15～30 分钟可完成；产出物只有一类；验收标准能用"是/否"回答；description 超 200 字未完边界说明需再拆；依赖超过 3 个前置说明上层设计需重拆 | `prompt/group-task-leader.md` | ❌ 待实现 |
+| 2 | Leader 提示词：拆分前先做结构规划 | 在工作流第 1、2 步之间加"先在回复中列出整体分解思路（阶段 + 子目标），告知用户确认方向后再开始 create_task"，防止方向错误导致大量任务返工 | `prompt/group-task-leader.md` | ❌ 待实现 |
+| 3 | Leader 提示词：autoApprove 使用原则 | 明确哪类任务强制 `autoApprove=true`（调研/单文件修改/有测试覆盖的追加），哪类保持 `false`（新增接口/多文件协同/验收标准有歧义），减少不必要的验收轮次 | `prompt/group-task-leader.md` | ❌ 待实现 |
+| 4 | 成员提示词：认领后先评估范围 | 在工作流 start_task 和执行之间加"先评估任务范围：一次对话能完成则直接执行；包含 2 个以上独立产出则先 list_tasks + create_task 拆子任务再执行"，避免执行到一半才意识到要拆 | `prompt/group-task-member.md` | ❌ 待实现 |
+| 5 | Dispatch 消息：加规模提示 | 在分配任务消息模板末尾追加："提示：本任务预期可在一次对话内完成；若执行中发现超出范围，请先 create_task 拆子任务再继续" | `lib/task-mode/dispatch.ts` | ❌ 待实现 |
+| 6 | Leader 提示词："不确定就问"原则 | 补充"用户目标描述模糊时先追问关键边界（技术栈、输入输出、验收标准），确认后再拆任务；不要因急于展示执行力而创建粒度过大的任务" | `prompt/group-task-leader.md` | ❌ 待实现 |
+
+---
+
+### 大项：引入结构化规划阶段（Plan Phase）
+
+> **背景**：当前任务模式本质上只是一个执行引擎——状态机、dispatch 队列、验收链路全部服务于"怎么把任务分配好"，却完全跳过了"任务是什么"这个前置问题。Leader 在没有充分信息的情况下直接拆任务，猜测带来的误差在每一层传递中被放大，最终产出与用户预期严重脱节。
+>
+> **核心思路**：任务模式从架构上强制分为两个阶段，执行阶段的入口是一个显式的门——用户确认 Plan 之前，系统拒绝任何 `create_task` 调用。Plan 是一个结构化的持久化产物，不是聊天记录，也不是随手备注。
+
+#### 行业参考：Claude Code 与 Codex 的 Plan Mode
+
+在实现前，先看两个成熟方案的做法，重点提取对我们有用的部分。
+
+**Claude Code Plan Mode**
+
+- **实现方式**：不是独立的 Plan Sub-Agent，而是**同一个 Agent + 注入规划阶段专属系统提示词**。激活后提示词里加入"不得执行任何写操作"的约束，靠提示词软性执行（无底层硬限制）。
+- **辅助子 Agent**：存在两个轻量子 Agent——`Explore`（并行扫描代码库，替 Leader 收集上下文）和 `Plan sub-agent`（规划阶段的提示词变体）。
+- **可用工具**：Read / Glob / Grep / LS / WebSearch / Task（派 Explore 子 Agent）/ `AskUserQuestion` / `ExitPlanMode`。
+- **关键约束**：每一轮必须以 `AskUserQuestion`（继续追问）或 `ExitPlanMode`（确认完成）结尾，不能自由输出后直接进入下一轮。
+- **Plan 产物**：一个普通 Markdown 文件，写入 `plans/` 目录，无强制结构，纯文本。退出 Plan Mode 时系统把文件内容读出注入执行阶段提示词。
+
+**Codex Plan Mode（PLANS.md）**
+
+- **实现方式**：`/plan [description]` 触发，产物是仓库里的 `PLANS.md` 活文档，跨 session 持久存在。
+- **探索优先**：在向用户提问之前，Codex 先在代码库里做至少两次定向搜索（配置文件、Schema、入口等），把背景摸清楚后再提问——不是一开口就问用户。
+- **问用户的方式**：`request_user_input` 工具，每次一个结构化问题 + 有限选项（多选），不是开放式聊天。
+- **PLANS.md 强制结构**：Purpose / Progress（checkbox 进度）/ Surprises & Discoveries / Decision Log / Context and Orientation / Plan of Work / Concrete Steps / Validation and Acceptance / Idempotence and Recovery。
+- **核心要求**：计划必须完全自包含，"一个对项目零了解的人拿着这份文档也能端到端实现"。
+
+**两者共同揭示的模式**
+
+| 维度 | Claude Code | Codex |
+|---|---|---|
+| Plan 产物形式 | plans/ 目录下的 Markdown 文件 | 仓库里的 PLANS.md 活文档 |
+| 问用户前先做什么 | Explore 子 Agent 扫代码库 | 至少两次定向代码库搜索 |
+| 问用户的方式 | 结构化多选 + 自由文本 | 结构化多选 + 自由文本 |
+| 执行阶段入口 | ExitPlanMode 显式工具调用 | 用户确认后才执行 |
+| Plan → 执行的桥 | 文件内容注入执行提示词 | PLANS.md 作为 Agent 上下文 |
+
+#### 对我们的直接参考
+
+1. **不需要独立的 Plan Sub-Agent**：Leader 同一 Agent，切换到规划阶段时注入 `prompt/group-task-plan.md` 专属提示词即可，实现最简单。
+
+2. **先读上下文，再问用户**：Leader 在规划阶段第一步应先读取群成员列表、群记忆、历史任务等已有信息，而不是直接开口提问。Codex 的"探索优先"原则在我们这里对应"先 `list_tasks` + 读群记忆，再向用户提问"。
+
+3. **问用户要结构化、定向**：每次问一个关键问题（目标是什么 / 约束是什么 / 验收标准是什么），不要用"请描述你的需求"这种开放题。每轮规划对话必须推进 Plan 里的某个具体字段。
+
+4. **Plan 产物参考 Codex 的字段结构**：Codex 的 `Purpose / Constraints / Deliverables / Acceptance / Plan of Work` 与我们设计的 `GroupPlan` 字段高度吻合，可以直接对标。不需要 Codex 里的 `Progress / Decision Log / Surprises` 等执行过程字段——我们有任务状态机和事件日志替代。
+
+5. **Plan 文件是执行阶段的信息来源**：确认后的 Plan 内容在 `create_task` 时自动附在任务 description 里（或作为背景上下文注入），让每个成员都能理解自己任务在整体目标中的位置，而不只是看到孤立的任务描述。
+
+6. **执行门控必须是显式动作**：模仿 `ExitPlanMode` 的设计——前端有「确认计划」按钮，后端 `handleCreateTask` 检查 `plan.status !== "confirmed"` 则拒绝，双重保障不会提前进入执行。
+
+#### 两阶段生命周期
+
+```
+[规划阶段] 用户 ↔ leader 多轮对话 → 实时填充 Plan 各字段 → 用户确认 Plan
+                                                                    ↓
+[执行阶段] leader 按 Plan 创建细化 Task → 各 agent 执行 → 验收 → 完成
+```
+
+#### Plan 数据结构
+
+```typescript
+interface GroupPlan {
+  panelId: string;
+  goal: string;                  // 最终目标（用户确认的一句话版本）
+  constraints: string[];         // 技术栈、风格、不能触碰的边界
+  deliverables: string[];        // 交付物清单（以什么形式存在）
+  acceptanceCriteria: string[];  // 验收标准（用户如何判断完成）
+  taskOutline: string[];         // leader 的高层拆分草稿（给用户预览，执行阶段再细化为 Task）
+  status: "drafting" | "confirmed";
+  confirmedAt?: string;
+  confirmedBy?: string;          // 确认人（userId）
+}
+```
+
+#### 两阶段对 leader 的行为约束
+
+| | 规划阶段 | 执行阶段 |
+|---|---|---|
+| **核心职责** | 通过多轮提问填充 Plan 各字段，与用户对齐目标 | 按确认后的 Plan 拆分并创建细化 Task |
+| **允许的工具** | 只能对话，**不得调用 `create_task`** | 完整 `group_task` 工具集 |
+| **结束条件** | 用户在 UI 点击「确认计划」 | 所有 Task 达到终态 |
+| **提示词** | 规划阶段专属提示词 `prompt/group-task-plan.md` | 现有 `prompt/group-task-leader.md` |
+
+#### 涉及改动
+
+| 类别 | 内容 | 进度 |
+|---|---|---|
+| 数据模型 | 新增 `GroupPlan` 类型；`StoredPanel` 追加 `planStatus: "drafting" \| "confirmed" \| null` | ❌ 待实现 |
+| 后端 store | `lib/task-mode/plan-store.ts`：Plan CRUD + `confirmPlan`（状态切换） | ❌ 待实现 |
+| 执行门控 | `app-rpc-handlers.ts` `handleCreateTask`：`plan.status !== "confirmed"` 时拒绝并返回错误提示 | ❌ 待实现 |
+| 消息路由 | `lib/task-mode/group-task-message.ts`：用户首条消息进入规划阶段，使用规划提示词注入，而非直接触发 leader 拆任务 | ❌ 待实现 |
+| 提示词 | 新增 `prompt/group-task-plan.md`：规划阶段 leader 专属提示词，指导逐步澄清目标、填充 Plan 字段、禁止提前 create_task | ❌ 待实现 |
+| API | 新增 `POST /api/panels/[panelId]/group-tasks/confirm-plan`：用户确认 Plan，触发阶段切换，注入执行阶段提示词 | ❌ 待实现 |
+| 前端 UI | 规划阶段：对话区右侧展示实时更新的 Plan 预览面板（goal / constraints / deliverables / acceptanceCriteria / taskOutline 各字段）；底部显示「确认计划」按钮，确认后切换为执行阶段看板 | ❌ 待实现 |
+

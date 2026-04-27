@@ -2450,6 +2450,9 @@ async function startGatewaySubscriberClient() {
 
   const gatewayAuthToken = await resolveGatewayAuthToken();
   const scopes = ["operator.admin", "operator.read", "operator.write"];
+  // mode: "cli" — 后台程序化连接，不产生 presence 条目（Gateway 文档：client.mode==="cli" 不会
+  // 写入 Instances 列表）。权限由 role/scopes 控制，mode 不影响 chat.send 等任何业务逻辑。
+  // 若改为 "ui"，每次插件重启都会在 macOS Instances 标签页留下多余的在线记录。
   const client = new GatewayClient({
     url: await resolveGatewayWsUrl(),
     token: gatewayAuthToken || undefined,
