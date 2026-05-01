@@ -944,7 +944,7 @@ app 进程重启后，持久化到 `app-data.json` 的任务数据（status、la
 |---|---|---|
 | `GET /api/panels/[panelId]/group-tasks`（任务列表） | ✅ | |
 | `POST /api/panels/[panelId]/group-tasks/[taskId]`（用户介入操作） | ✅ | |
-| **`GET /api/panels/[panelId]/group-tasks/stream`（任务变更 SSE 端点）** | ❌ | 设计要求独立 SSE 端点，未实现；前端用轮询替代 |
+| `GET /api/panels/[panelId]/group-tasks/stream`（任务变更 SSE 端点） | ✅ | 订阅 `subscribeGroupTasksUpdate`，推送 `tasks_updated` 事件；已合并进主 panel stream（`tasks_updated` 事件），同时保留独立端点 |
 
 ### 九、架构隔离
 
@@ -970,7 +970,7 @@ app 进程重启后，持久化到 `app-data.json` 的任务数据（status、la
 | 重启后重建 pending dispatch 队列 | ✅ | `instrumentation.ts` → `rebuildPendingDispatchQueues` |
 | 重启后清空 `activeRunId` | ✅ | `instrumentation.ts` → `clearAllActiveRunIds` |
 | 重启后启动 watchdog 定时器 | ✅ | `instrumentation.ts` → `startTaskModeWatchdog` |
-| **重启后对遗漏的 `assigned` 任务重新 dispatch** | ❌ | 设计文档要求重建队列时，若 assignee 无活跃任务应重新 dispatch 队首任务；`instrumentation.ts` 只重建了队列，未触发 dispatch |
+| 重启后对遗漏的 `assigned` 任务重新 dispatch | ✅ | `instrumentation.ts` 调用 `dispatchOrphanedAssignedTasks`：无活跃任务且 `lastDispatchAt` 超过 5 分钟的 assignee，立即 flush 队首任务 |
 
 ---
 

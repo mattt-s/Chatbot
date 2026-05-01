@@ -17,6 +17,9 @@ export async function register() {
       "@/lib/task-mode/store"
     );
     const { startTaskModeWatchdog } = await import("@/lib/task-mode/watchdog");
+    const { dispatchOrphanedAssignedTasks } = await import(
+      "@/lib/task-mode/app-rpc-handlers"
+    );
 
     // 1. 拉取所有任务，重建内存队列
     const allTasks = await readAllGroupTasks();
@@ -26,7 +29,11 @@ export async function register() {
     const panelIds = [...new Set(allTasks.map((t) => t.panelId))];
     await Promise.all(panelIds.map((id) => clearAllActiveRunIds(id)));
 
-    // 3. 启动 watchdog 定时器
+    // 3. 对无活跃任务但有 assigned 任务的 assignee，立即重新 dispatch 队首任务
+    //    （lastDispatchAt 在 5 分钟内的跳过，避免快速重启重复 dispatch）
+    await dispatchOrphanedAssignedTasks(allTasks);
+
+    // 4. 启动 watchdog 定时器
     startTaskModeWatchdog();
   } catch (err) {
     // 初始化失败不阻塞应用启动，仅记录到控制台

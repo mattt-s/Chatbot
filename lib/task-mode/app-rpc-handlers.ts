@@ -159,6 +159,57 @@ async function triggerDependentTasks(panelId: string, doneTaskId: string) {
   }
 }
 
+/**
+ * 进程重启后，对所有"无活跃任务但 pending 队列不为空"的 assignee 重新 dispatch 队首任务。
+ *
+ * 调用时机：instrumentation.ts，在 rebuildPendingDispatchQueues 和 clearAllActiveRunIds 之后。
+ *
+ * 防重复保护：若最近一次 lastDispatchAt 在 5 分钟内，跳过（可能是快速重启，原 run 仍在启动中）。
+ */
+export async function dispatchOrphanedAssignedTasks(
+  allTasks: import("@/lib/task-mode/types").StoredGroupTask[],
+): Promise<void> {
+  const FIVE_MIN_MS = 5 * 60 * 1000;
+  const now = Date.now();
+
+  // 按 panelId + assigneeRoleId 分组
+  const grouped = new Map<string, { panelId: string; assigneeRoleId: string }>();
+  for (const task of allTasks) {
+    if (!task.assigneeRoleId) continue;
+    const key = `${task.panelId}:${task.assigneeRoleId}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, { panelId: task.panelId, assigneeRoleId: task.assigneeRoleId });
+    }
+  }
+
+  for (const { panelId, assigneeRoleId } of grouped.values()) {
+    const tasks = allTasks.filter(
+      (t) => t.panelId === panelId && t.assigneeRoleId === assigneeRoleId,
+    );
+
+    // 有 in_progress/blocked 任务则跳过——队列推进逻辑由正常终态触发
+    const hasActive = tasks.some(
+      (t) => t.status === "in_progress" || t.status === "blocked",
+    );
+    if (hasActive) continue;
+
+    // 没有 assigned 任务则跳过
+    const assignedTasks = tasks.filter((t) => t.status === "assigned");
+    if (assignedTasks.length === 0) continue;
+
+    // 防重复：若最近一次 dispatch 在 5 分钟内，跳过
+    const latestDispatch = assignedTasks
+      .map((t) => (t.lastDispatchAt ? new Date(t.lastDispatchAt).getTime() : 0))
+      .reduce((a, b) => Math.max(a, b), 0);
+    if (latestDispatch > 0 && now - latestDispatch < FIVE_MIN_MS) continue;
+
+    // dispatch 队首任务
+    await flushPendingDispatch(panelId, assigneeRoleId).catch((err: unknown) => {
+      log.error("dispatchOrphanedAssignedTasks", { panelId, assigneeRoleId, err: String(err) });
+    });
+  }
+}
+
 /** 当前任务终态后，从队列取下一个任务 dispatch。 */
 async function flushPendingDispatch(panelId: string, assigneeRoleId: string) {
   const nextTaskId = dequeuePendingDispatch(assigneeRoleId);
