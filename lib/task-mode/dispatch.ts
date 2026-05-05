@@ -45,6 +45,12 @@ export function markTaskModeInitialized(panelId: string, roleId: string): void {
   initializedRoles().add(`${panelId}:${roleId}`);
 }
 
+/** 重置指定角色的首次 dispatch 标记，使下次 dispatch 重新注入提示词。 */
+export function resetTaskModeInitialized(panelId: string, roleId: string): void {
+  const key = `${panelId}:${roleId}`;
+  initializedRoles().delete(key);
+}
+
 // ─────────────────────────────────────────────────────────────
 // 提示词加载
 // ─────────────────────────────────────────────────────────────
