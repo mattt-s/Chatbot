@@ -35,6 +35,7 @@ import { readGroupTasks } from "@/lib/store";
 import { listGroupRoles } from "@/lib/store";
 import { abortGroupRoleRun, getRoleCurrentRunId } from "@/lib/group-router";
 import { createLogger } from "@/lib/logger";
+import { getTaskModePlan } from "@/lib/task-mode/plan-store";
 
 const log = createLogger("task-mode:rpc");
 
@@ -243,6 +244,16 @@ async function flushPendingDispatch(panelId: string, assigneeRoleId: string) {
 
 async function handleCreateTask(panelId: string, params: RpcParams) {
   const caller = await resolveCallerRole(panelId, params);
+
+  // 执行门控：Plan 未确认前禁止创建任务
+  const plan = await getTaskModePlan(panelId);
+  if (!plan || plan.status !== "confirmed") {
+    throw new Error(
+      "规划方案尚未确认。请先完成规划阶段（与用户对齐目标、约束、验收标准），" +
+      "填写完所有 task_plan 字段后，提示用户点击「确认计划」按钮，再创建任务。",
+    );
+  }
+
   const title = readStr(params, "title", true);
   const description = readStr(params, "description", true);
   const assigneeTitle = readStr(params, "assigneeTitle", true);
