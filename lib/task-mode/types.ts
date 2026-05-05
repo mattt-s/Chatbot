@@ -225,3 +225,47 @@ export function deriveGroupTaskModeState(tasks: StoredGroupTask[]): GroupTaskMod
   if (active.some((t) => t.status === "created")) return "waiting_dependency";
   return "idle";
 }
+
+// ─────────────────────────────────────────────────────────────
+// Task Mode Plan (Planning Phase)
+// ─────────────────────────────────────────────────────────────
+
+export type TaskModePlanStatus = "drafting" | "confirmed";
+
+export const TASK_PLAN_FIELDS = [
+  "goal",
+  "constraints",
+  "deliverables",
+  "acceptanceCriteria",
+  "taskOutline",
+] as const;
+
+export type TaskModePlanField = typeof TASK_PLAN_FIELDS[number];
+
+export interface TaskModePlan {
+  panelId: string;
+  /** 最终目标（一句话版本） */
+  goal: string;
+  /** 约束条件：技术栈、风格、禁止触碰的边界 */
+  constraints: string[];
+  /** 交付物清单：以什么形式存在、存在哪里 */
+  deliverables: string[];
+  /** 验收标准：用户如何判断完成 */
+  acceptanceCriteria: string[];
+  /** leader 的高层拆分草稿（给用户预览，执行阶段再细化为 Task） */
+  taskOutline: string[];
+  status: TaskModePlanStatus;
+  confirmedAt?: string;
+}
+
+export function emptyTaskModePlan(panelId: string): TaskModePlan {
+  return {
+    panelId,
+    goal: "",
+    constraints: [],
+    deliverables: [],
+    acceptanceCriteria: [],
+    taskOutline: [],
+    status: "drafting",
+  };
+}
