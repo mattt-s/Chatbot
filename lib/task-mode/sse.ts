@@ -50,3 +50,29 @@ export function subscribeGroupTasksUpdate(listener: TasksUpdateListener): () => 
     listeners().delete(listener);
   };
 }
+
+// ─── Plan 更新通知 ───────────────────────────────────────────
+
+type PlanUpdateListener = (panelId: string) => void;
+
+declare global {
+  var __taskModePlanUpdateListeners: Set<PlanUpdateListener> | undefined;
+}
+
+function planListeners(): Set<PlanUpdateListener> {
+  if (!globalThis.__taskModePlanUpdateListeners) {
+    globalThis.__taskModePlanUpdateListeners = new Set();
+  }
+  return globalThis.__taskModePlanUpdateListeners;
+}
+
+export function publishGroupPlanUpdate(panelId: string) {
+  for (const listener of planListeners()) {
+    try { listener(panelId); } catch { /* ignore */ }
+  }
+}
+
+export function subscribeGroupPlanUpdate(listener: PlanUpdateListener): () => void {
+  planListeners().add(listener);
+  return () => { planListeners().delete(listener); };
+}

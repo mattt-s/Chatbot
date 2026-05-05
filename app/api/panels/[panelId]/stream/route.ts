@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { ensureCustomChatBridgeServer } from "@/lib/customchat-bridge-server";
 import { subscribeCustomChatEvent } from "@/lib/customchat-events";
-import { subscribeGroupTasksUpdate } from "@/lib/task-mode/sse";
+import { subscribeGroupTasksUpdate, subscribeGroupPlanUpdate } from "@/lib/task-mode/sse";
 import {
   getPanelRecordForUser,
   setPanelActiveRun,
@@ -113,6 +113,7 @@ export async function GET(_request: Request, context: RouteContext) {
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let unsubscribeChat: (() => void) | null = null;
   let unsubscribeTasks: (() => void) | null = null;
+  let unsubscribePlan: (() => void) | null = null;
   let closed = false;
 
   const stream = new ReadableStream<Uint8Array>({
@@ -149,6 +150,11 @@ export async function GET(_request: Request, context: RouteContext) {
         push("tasks_updated", { panelId: panel.id });
       });
 
+      unsubscribePlan = subscribeGroupPlanUpdate((updatedPanelId) => {
+        if (updatedPanelId !== panel.id) return;
+        push("plan_updated", { panelId: panel.id });
+      });
+
       heartbeatTimer = globalThis.setInterval(() => {
         controller.enqueue(encoder.encode(": ping\n\n"));
       }, 15_000);
@@ -167,6 +173,7 @@ export async function GET(_request: Request, context: RouteContext) {
         unsubscribeTasks();
         unsubscribeTasks = null;
       }
+      if (unsubscribePlan) { unsubscribePlan(); unsubscribePlan = null; }
       return undefined;
     },
   });
