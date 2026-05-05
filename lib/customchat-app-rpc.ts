@@ -572,6 +572,16 @@ export function consumeRouteIntent(runId: string): PendingRouteIntent | null {
 // group_task.* handler（任务模式，完全独立于聊天模式）
 // ─────────────────────────────────────────────────────────────
 
+async function handleTaskPlanRpc(method: string, params: AppRpcParams) {
+  const { handleTaskPlanUpdateField } = await import("@/lib/task-mode/plan-rpc-handlers");
+  switch (method) {
+    case "task_plan.update_field":
+      return handleTaskPlanUpdateField(params);
+    default:
+      throw new Error(`Unknown task_plan RPC method: ${method}`);
+  }
+}
+
 async function handleGroupTask(params: AppRpcParams) {
   const { dispatchGroupTaskRpc } = await import("@/lib/task-mode/app-rpc-handlers");
   const panelId = typeof params.panelId === "string" ? params.panelId.trim() : "";
@@ -628,6 +638,8 @@ export async function dispatchCustomChatAppRpc(
     // ── 任务模式（入口分流，后续完全由 task-mode 模块处理）──
     case "group_task":
       return handleGroupTask(params);
+    case "task_plan.update_field":
+      return handleTaskPlanRpc(method, params);
     default:
       throw new Error(`Unknown App RPC method: ${method}`);
   }
