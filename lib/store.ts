@@ -60,6 +60,7 @@ const EMPTY_DATA: AppData = {
   messages: [],
   groupRoles: [],
   groupTasks: [],
+  taskModePlans: [],
   settings: {},
 };
 
@@ -169,6 +170,7 @@ async function readData(): Promise<AppData> {
   }));
   parsed.groupRoles = parsed.groupRoles ?? [];
   parsed.groupTasks = parsed.groupTasks ?? [];
+  parsed.taskModePlans = parsed.taskModePlans ?? [];
   parsed.settings = parsed.settings ?? {};
   parsed.messages = (parsed.messages ?? []).map((message) => ({
     ...message,
@@ -1994,4 +1996,26 @@ export async function mutateGroupTasks<T = void>(
 export async function readAllGroupTasks() {
   const data = await readData();
   return structuredClone(data.groupTasks ?? []);
+}
+
+/**
+ * 对 taskModePlans 数组执行变更回调，自动持久化。
+ */
+export async function mutateTaskModePlans<T = void>(
+  callback: (plans: import("./task-mode/types").TaskModePlan[]) => T,
+): Promise<T> {
+  return mutateData((draft) => {
+    draft.taskModePlans = draft.taskModePlans ?? [];
+    return callback(draft.taskModePlans) as T;
+  });
+}
+
+/**
+ * 读取指定面板的 TaskModePlan（无则返回 null）。
+ */
+export async function readTaskModePlan(
+  panelId: string,
+): Promise<import("./task-mode/types").TaskModePlan | null> {
+  const data = await readData();
+  return (data.taskModePlans ?? []).find((p) => p.panelId === panelId) ?? null;
 }

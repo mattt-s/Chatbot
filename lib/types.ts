@@ -219,6 +219,8 @@ export interface AppData {
   settings?: StoredAppSettings;
   /** 任务模式任务列表（仅 groupMode="task" 的群组使用） */
   groupTasks?: import("./task-mode/types").StoredGroupTask[];
+  /** 任务模式计划列表 */
+  taskModePlans?: import("./task-mode/types").TaskModePlan[];
 }
 
 /** 会话中的用户信息（不含敏感字段） */
