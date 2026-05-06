@@ -26,6 +26,7 @@ import {
   isTaskModeFirstDispatch,
   markTaskModeInitialized,
 } from "@/lib/task-mode/dispatch";
+import { getTaskModePlan } from "@/lib/task-mode/plan-store";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -146,7 +147,11 @@ export async function submitGroupTaskMessage(
 
   // 首次 dispatch：注入 leader 系统提示词（含群内成员列表）
   if (isTaskModeFirstDispatch(input.panel.id, leader.id)) {
-    const template = loadPromptFile("group-task-leader.md");
+    // 规划阶段未完成时注入规划提示词，否则注入执行提示词
+    const plan = await getTaskModePlan(input.panel.id);
+    const isPlanConfirmed = plan?.status === "confirmed";
+    const promptFile = isPlanConfirmed ? "group-task-leader.md" : "group-task-plan.md";
+    const template = loadPromptFile(promptFile);
     if (template) {
       const membersList = formatMembersList(groupRoles, leader.id);
       const prompt = applyTemplateVars(template, {
