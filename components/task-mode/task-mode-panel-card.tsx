@@ -17,7 +17,7 @@ import { CreateGroupRoleDialog } from "@/components/create-group-role-dialog";
 import type { CreateGroupRoleDialogConfig } from "@/components/create-group-role-dialog";
 import { ManageGroupRolesDialog } from "@/components/manage-group-roles-dialog";
 import type { ManageGroupRolesDialogConfig } from "@/components/manage-group-roles-dialog";
-import type { GroupTaskModeState, GroupTaskStatus, GroupTaskView } from "@/lib/task-mode/types";
+import type { GroupTaskModeState, GroupTaskStatus, GroupTaskView, TaskModePlan } from "@/lib/task-mode/types";
 import type { AgentView, ChatEventPayload, MessageView, PanelView } from "@/lib/types";
 import type { GroupRoleView } from "@/lib/types";
 import { applyChatEventToMessages } from "@/lib/utils";
@@ -28,6 +28,7 @@ import {
 
 import { TaskModeBoard } from "./task-mode-board";
 import { TaskModeConversation } from "./task-mode-conversation";
+import { TaskModePlanView } from "@/components/task-mode/task-mode-plan-view";
 
 // ─────────────────────────────────────────────────────────────
 // 辅助
@@ -89,6 +90,8 @@ export function TaskModePanelCard({
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"chat" | "board">("chat");
+  const [plan, setPlan] = useState<TaskModePlan | null>(null);
+  const [isConfirmingPlan, setIsConfirmingPlan] = useState(false);
 
   // ── 角色管理对话框 ──
   const [createGroupRoleDialog, setCreateGroupRoleDialog] =
@@ -167,6 +170,32 @@ export function TaskModePanelCard({
   }, [panel.id]);
 
   useEffect(() => { void fetchTasks(); }, [fetchTasks]);
+
+  // ── Plan fetch ──
+
+  const fetchPlan = useCallback(async () => {
+    const resp = await fetch(`/api/panels/${panel.id}/task-plan`).catch(() => null);
+    if (!resp?.ok) return;
+    const data = (await resp.json().catch(() => null)) as { plan: TaskModePlan } | null;
+    if (data?.plan) setPlan(data.plan);
+  }, [panel.id]);
+
+  useEffect(() => { void fetchPlan(); }, [fetchPlan]);
+
+  const handleConfirmPlan = useCallback(async () => {
+    setIsConfirmingPlan(true);
+    try {
+      const resp = await fetch(`/api/panels/${panel.id}/task-plan/confirm`, {
+        method: "POST",
+      });
+      if (resp.ok) {
+        const data = (await resp.json().catch(() => null)) as { plan: TaskModePlan } | null;
+        if (data?.plan) setPlan(data.plan);
+      }
+    } finally {
+      setIsConfirmingPlan(false);
+    }
+  }, [panel.id]);
 
   // ── 角色管理 ──
 
@@ -280,6 +309,10 @@ export function TaskModePanelCard({
       void fetchTasks();
     });
 
+    source.addEventListener("plan_updated", () => {
+      void fetchPlan();
+    });
+
     source.addEventListener("chat", (e: MessageEvent<string>) => {
       const payload = JSON.parse(e.data) as ChatEventPayload;
 
@@ -334,7 +367,7 @@ export function TaskModePanelCard({
     source.onerror = onError;
 
     return () => source.close();
-  }, [panel.id, panel.kind, panel.sessionKey]);
+  }, [panel.id, panel.kind, panel.sessionKey, fetchPlan, fetchTasks]);
 
   // tasks_updated 事件已合并进主 panel stream，无需独立的 group-tasks/stream 连接
 
@@ -613,20 +646,28 @@ export function TaskModePanelCard({
           />
         </div>
 
-        {/* 任务看板 */}
+        {/* 任务看板 / 计划视图 */}
         <div
           className={[
             "min-w-0 flex-1",
             mobileTab === "board" ? "flex" : "hidden md:flex",
           ].join(" ")}
         >
-          <TaskModeBoard
-            tasks={tasks}
-            groupState={groupState}
-            isLoading={isLoadingTasks}
-            panelId={panel.id}
-            onRefresh={() => void fetchTasks()}
-          />
+          {plan && plan.status !== "confirmed" ? (
+            <TaskModePlanView
+              plan={plan}
+              isConfirming={isConfirmingPlan}
+              onConfirm={handleConfirmPlan}
+            />
+          ) : (
+            <TaskModeBoard
+              tasks={tasks}
+              groupState={groupState}
+              isLoading={isLoadingTasks}
+              panelId={panel.id}
+              onRefresh={() => void fetchTasks()}
+            />
+          )}
         </div>
       </div>
 
