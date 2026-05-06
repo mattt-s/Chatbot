@@ -91,7 +91,7 @@ export function TaskModePlanView({ plan, isConfirming, onConfirm }: Props) {
         <button
           type="button"
           onClick={onConfirm}
-          disabled={isConfirming}
+          disabled={isConfirming || !plan.goal.trim()}
           className="w-full rounded-xl bg-[var(--ink)] py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isConfirming ? "确认中…" : "确认计划，进入执行阶段"}

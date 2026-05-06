@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getPanelRecordForUser } from "@/lib/store";
-import { getOrCreateTaskModePlan } from "@/lib/task-mode/plan-store";
+import { getTaskModePlan } from "@/lib/task-mode/plan-store";
 
 type RouteContext = { params: Promise<{ panelId: string }> };
 
@@ -17,6 +17,6 @@ export async function GET(_req: Request, context: RouteContext) {
   const panel = await getPanelRecordForUser(user.id, panelId).catch(() => null);
   if (!panel) return NextResponse.json({ error: "Panel not found." }, { status: 404 });
 
-  const plan = await getOrCreateTaskModePlan(panelId);
-  return NextResponse.json({ plan });
+  const plan = await getTaskModePlan(panelId);
+  return NextResponse.json({ plan: plan ?? null });
 }

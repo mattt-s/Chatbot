@@ -15,8 +15,8 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
 import { getPanelRecordForUser, listGroupRoles } from "@/lib/store";
-import { confirmTaskModePlan } from "@/lib/task-mode/plan-store";
-import { resetTaskModeInitialized } from "@/lib/task-mode/dispatch";
+import { confirmTaskModePlan, getTaskModePlan } from "@/lib/task-mode/plan-store";
+import { resetTaskModeInitialized, markTaskModeInitialized } from "@/lib/task-mode/dispatch";
 import {
   ensureCustomChatBridgeServer,
   sendInboundToPlugin,
@@ -50,6 +50,20 @@ export async function POST(_req: Request, context: RouteContext) {
   const { panelId } = await context.params;
   const panel = await getPanelRecordForUser(user.id, panelId).catch(() => null);
   if (!panel) return NextResponse.json({ error: "Panel not found." }, { status: 404 });
+
+  // Fix 5: Idempotency — return early if already confirmed
+  const existingPlan = await getTaskModePlan(panelId);
+  if (existingPlan?.status === "confirmed") {
+    return NextResponse.json({ ok: true, plan: existingPlan });
+  }
+
+  // Fix 3: Validate plan has a goal before confirming
+  if (!existingPlan || !existingPlan.goal.trim()) {
+    return NextResponse.json(
+      { error: "计划目标不能为空，请先完成规划对话。" },
+      { status: 422 },
+    );
+  }
 
   // 1. 确认 Plan
   const plan = await confirmTaskModePlan(panelId);
@@ -116,6 +130,9 @@ export async function POST(_req: Request, context: RouteContext) {
     text: textToSend,
     attachments: [],
   });
+
+  // Fix 4: Re-mark so user's next message doesn't re-inject the execution prompt again
+  markTaskModeInitialized(panelId, leader.id);
 
   return NextResponse.json({ ok: true, plan });
 }

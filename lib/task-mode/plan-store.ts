@@ -22,16 +22,15 @@ export async function getTaskModePlan(panelId: string): Promise<TaskModePlan | n
 
 /** 获取面板的 Plan，不存在则自动创建并持久化一个空 Plan。 */
 export async function getOrCreateTaskModePlan(panelId: string): Promise<TaskModePlan> {
-  const existing = await readTaskModePlan(panelId);
-  if (existing) return existing;
-
-  const plan = emptyTaskModePlan(panelId);
-  await mutateTaskModePlans((plans) => {
-    plans.push(plan);
+  return mutateTaskModePlans((plans) => {
+    let plan = plans.find((p) => p.panelId === panelId);
+    if (!plan) {
+      plan = emptyTaskModePlan(panelId);
+      plans.push(plan);
+      log.debug("getOrCreateTaskModePlan.created", { panelId });
+    }
+    return structuredClone(plan);
   });
-
-  log.debug("getOrCreateTaskModePlan.created", { panelId });
-  return plan;
 }
 
 /**

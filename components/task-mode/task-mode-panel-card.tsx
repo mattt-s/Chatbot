@@ -191,6 +191,8 @@ export function TaskModePanelCard({
       if (resp.ok) {
         const data = (await resp.json().catch(() => null)) as { plan: TaskModePlan } | null;
         if (data?.plan) setPlan(data.plan);
+      } else {
+        console.error("[task-plan] confirm failed:", resp.status);
       }
     } finally {
       setIsConfirmingPlan(false);
