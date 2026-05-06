@@ -1088,13 +1088,19 @@ interface GroupPlan {
 
 #### 涉及改动
 
-| 类别 | 内容 | 进度 |
-|---|---|---|
-| 数据模型 | 新增 `GroupPlan` 类型；`StoredPanel` 追加 `planStatus: "drafting" \| "confirmed" \| null` | ❌ 待实现 |
-| 后端 store | `lib/task-mode/plan-store.ts`：Plan CRUD + `confirmPlan`（状态切换） | ❌ 待实现 |
-| 执行门控 | `app-rpc-handlers.ts` `handleCreateTask`：`plan.status !== "confirmed"` 时拒绝并返回错误提示 | ❌ 待实现 |
-| 消息路由 | `lib/task-mode/group-task-message.ts`：用户首条消息进入规划阶段，使用规划提示词注入，而非直接触发 leader 拆任务 | ❌ 待实现 |
-| 提示词 | 新增 `prompt/group-task-plan.md`：规划阶段 leader 专属提示词，指导逐步澄清目标、填充 Plan 字段、禁止提前 create_task | ❌ 待实现 |
-| API | 新增 `POST /api/panels/[panelId]/group-tasks/confirm-plan`：用户确认 Plan，触发阶段切换，注入执行阶段提示词 | ❌ 待实现 |
-| 前端 UI | 规划阶段：对话区右侧展示实时更新的 Plan 预览面板（goal / constraints / deliverables / acceptanceCriteria / taskOutline 各字段）；底部显示「确认计划」按钮，确认后切换为执行阶段看板 | ❌ 待实现 |
+> **命名说明**：实现时将类型命名为 `TaskModePlan`（而非设计中的 `GroupPlan`），以避免与聊天模式已有的 `GroupPlan`/`manage_group_plan` 命名冲突。Plugin tool 命名为 `task_plan`，RPC 路径为 `task_plan.update_field`。
+
+| 类别 | 内容 | 进度 | 实现位置 |
+|---|---|---|---|
+| 数据模型 | 新增 `TaskModePlan` 类型（含 `TaskModePlanStatus`、`TASK_PLAN_FIELDS`、`emptyTaskModePlan`）；`AppData` 追加 `taskModePlans: TaskModePlan[]` | ✅ | `lib/task-mode/types.ts`、`lib/types.ts`、`lib/store.ts`（`mutateTaskModePlans`、`readTaskModePlan`） |
+| 后端 store | `lib/task-mode/plan-store.ts`：原子 CRUD（`getTaskModePlan`、`getOrCreateTaskModePlan`、`updateTaskModePlanField`、`confirmTaskModePlan`）；写入后触发 `publishGroupPlanUpdate` | ✅ | `lib/task-mode/plan-store.ts` |
+| SSE 推送 | `plan_updated` 事件：`publishGroupPlanUpdate` / `subscribeGroupPlanUpdate`；主 panel stream 订阅并推送 | ✅ | `lib/task-mode/sse.ts`、`app/api/panels/[panelId]/stream/route.ts` |
+| Plugin Tool | 新增 `task_plan` tool（`action: update_field`，5 个字段枚举）；调用 `sendPortalAppRpc("task_plan.update_field", ...)` | ✅ | `plugins/customchat/task-plan-tool.ts`、`plugins/customchat/index.ts` |
+| RPC Handler | `task_plan.update_field` → `handleTaskPlanUpdateField`；验证字段名、转换值类型、调用 plan-store | ✅ | `lib/task-mode/plan-rpc-handlers.ts`、`lib/customchat-app-rpc.ts` |
+| 执行门控 | `handleCreateTask` 开头检查 `plan.status !== "confirmed"`，拒绝并返回中文错误提示 | ✅ | `lib/task-mode/app-rpc-handlers.ts` |
+| 消息路由 | 首次 dispatch 时若 plan 未 confirmed，注入规划提示词 `group-task-plan.md`；confirmed 后注入执行提示词 `group-task-leader.md` | ✅ | `lib/task-mode/group-task-message.ts` |
+| 提示词 | `prompt/group-task-plan.md`：规划阶段 leader 专属提示词（先读群记忆、逐字段提问、每轮调 `task_plan`、禁止 `create_task`） | ✅ | `prompt/group-task-plan.md` |
+| API — 读取 Plan | `GET /api/panels/[panelId]/task-plan`：返回当前 Plan（无则 null，不自动创建） | ✅ | `app/api/panels/[panelId]/task-plan/route.ts` |
+| API — 确认 Plan | `POST /api/panels/[panelId]/task-plan/confirm`：校验 goal 非空、幂等检查、`confirmTaskModePlan`、`resetTaskModeInitialized`、向 Leader 发送执行阶段提示词 + Plan 摘要、`markTaskModeInitialized`（防重注入） | ✅ | `app/api/panels/[panelId]/task-plan/confirm/route.ts`、`lib/task-mode/dispatch.ts`（新增 `resetTaskModeInitialized`） |
+| 前端 UI | `TaskModePlanView`：右栏规划预览（进度条、5 字段、goal 非空才解锁确认按钮）；`task-mode-panel-card.tsx` 订阅 `plan_updated` SSE、mount 时拉取 Plan、`plan.status !== "confirmed"` 时显示规划面板，confirmed 后切换为任务看板 | ✅ | `components/task-mode/task-mode-plan-view.tsx`、`components/task-mode/task-mode-panel-card.tsx` |
 
